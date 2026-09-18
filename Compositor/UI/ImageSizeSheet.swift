@@ -60,23 +60,23 @@ struct ImageSizeSheet: View {
     var body: some View { sheet.roundedControls() }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Image Size").font(.title2.bold())
-            Text("Current: \(document.width) × \(document.height) pixels").foregroundStyle(.secondary)
-            Picker("Units", selection: $unit) {
-                ForEach(units.filter { resample || ($0 != "Pixels" && $0 != "Percent") }, id: \.self) { Text($0) }
+            Text("Image Size".localized).font(.title2.bold())
+            Text(String(format: "Current: %d × %d pixels".localized, document.width, document.height)).foregroundStyle(.secondary)
+            Picker("Units".localized, selection: $unit) {
+                ForEach(units.filter { resample || ($0 != "Pixels" && $0 != "Percent") }, id: \.self) { Text($0.localized) }
             }
             HStack {
-                Text("Width").frame(width: 75, alignment: .leading)
-                TextField("Width", value: dimension(isWidth: true), format: .number.precision(.fractionLength(0...3)))
+                Text("Width".localized).frame(width: 75, alignment: .leading)
+                TextField("Width".localized, value: dimension(isWidth: true), format: .number.precision(.fractionLength(0...3)))
             }
             HStack {
-                Text("Height").frame(width: 75, alignment: .leading)
-                TextField("Height", value: dimension(isWidth: false), format: .number.precision(.fractionLength(0...3)))
+                Text("Height".localized).frame(width: 75, alignment: .leading)
+                TextField("Height".localized, value: dimension(isWidth: false), format: .number.precision(.fractionLength(0...3)))
             }
-            Toggle("Lock aspect ratio", isOn: $locked).disabled(!resample)
+            Toggle("Lock aspect ratio".localized, isOn: $locked).disabled(!resample)
             HStack {
-                Text("Resolution")
-                TextField("Resolution", value: $resolution, format: .number.precision(.fractionLength(0...3)))
+                Text("Resolution".localized)
+                TextField("Resolution".localized, value: $resolution, format: .number.precision(.fractionLength(0...3)))
                     .onChange(of: resolution) { old, new in
                         if resample, unit == "Inches" || unit == "Centimeters",
                            old > 0, new > 0, new.isFinite {
@@ -84,9 +84,9 @@ struct ImageSizeSheet: View {
                             height *= new / old
                         }
                     }
-                Text("pixels/inch").foregroundStyle(.secondary)
+                Text("pixels/inch".localized).foregroundStyle(.secondary)
             }
-            Toggle("Resample", isOn: $resample).onChange(of: resample) { _, enabled in
+            Toggle("Resample".localized, isOn: $resample).onChange(of: resample) { _, enabled in
                 if !enabled {
                     width = Double(document.width)
                     height = Double(document.height)
@@ -95,21 +95,21 @@ struct ImageSizeSheet: View {
                 }
             }
             if resample {
-                Picker("Sampling", selection: $sampling) {
-                    ForEach(LayerSampling.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                Picker("Sampling".localized, selection: $sampling) {
+                    ForEach(LayerSampling.allCases, id: \.self) { Text($0.rawValue.localized).tag($0) }
                 }
-                Text("Resizes layer pixels and applies existing transforms. Undo restores the originals.")
+                Text("Resizes layer pixels and applies existing transforms. Undo restores the originals.".localized)
                     .font(.callout).foregroundStyle(.secondary)
             } else {
-                Text("Only print dimensions and resolution change. Pixels stay unchanged.")
+                Text("Only print dimensions and resolution change. Pixels stay unchanged.".localized)
                     .font(.callout).foregroundStyle(.secondary)
             }
-            Text(valid ? "Result: \(Int(width.rounded())) × \(Int(height.rounded())) pixels" : "Use 1–30,000 pixels per side, up to 100 megapixels, and 1–9,600 pixels/inch.")
+            Text(valid ? String(format: "Result: %d × %d pixels".localized, Int(width.rounded()), Int(height.rounded())) : "Use 1–30,000 pixels per side, up to 100 megapixels, and 1–9,600 pixels/inch.".localized)
                 .foregroundStyle(valid ? Color.secondary : Color.orange).font(.callout)
             HStack {
-                Button("Cancel") { finish(nil) }.keyboardShortcut(.cancelAction)
+                Button("Cancel".localized) { finish(nil) }.keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Resize") {
+                Button("Resize".localized) {
                     guard valid else { return }
                     finish(ImageSizeOptions(width: Int(width.rounded()), height: Int(height.rounded()),
                         resolution: resolution, sampling: sampling))

@@ -24,7 +24,7 @@ struct JPEGExportSheet: View {
     var body: some View { sheet.roundedControls() }
     @ViewBuilder private var sheet: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Export JPEG").font(.title2.bold())
+            Text("Export JPEG".localized).font(.title2.bold())
             ZStack {
                 Color(white: 0.12)
                 if let result {
@@ -36,12 +36,12 @@ struct JPEGExportSheet: View {
                 }
             }.frame(width: 560, height: 330).clipped()
             HStack {
-                Text("Quality")
+                Text("Quality".localized)
                 Slider(value: $options.quality, in: 0...1, step: 0.01)
                 Text("\(Int((options.quality * 100).rounded()))%")
                     .monospacedDigit().frame(width: 45, alignment: .trailing)
             }
-            ColorPicker("Background for transparency", selection: $matte, supportsOpacity: false)
+            ColorPicker("Background for transparency".localized, selection: $matte, supportsOpacity: false)
                 .onChange(of: matte) { _, color in
                     guard let rgb = NSColor(color).usingColorSpace(.sRGB) else { return }
                     options.red = rgb.redComponent
@@ -54,11 +54,11 @@ struct JPEGExportSheet: View {
                 if let error { Text(error).foregroundStyle(.red) }
                 else if readyOptions == options, let result {
                     Text(ByteCountFormatter.string(fromByteCount: Int64(result.data.count), countStyle: .file))
-                    Text("· encoded preview, fitted to window").foregroundStyle(.secondary)
-                } else { Text("Updating preview…").foregroundStyle(.secondary) }
+                    Text("· encoded preview, fitted to window".localized).foregroundStyle(.secondary)
+                } else { Text("Updating preview…".localized).foregroundStyle(.secondary) }
                 Spacer()
-                Button("Cancel") { finish(nil) }.keyboardShortcut(.cancelAction)
-                Button("Export…") {
+                Button("Cancel".localized) { finish(nil) }.keyboardShortcut(.cancelAction)
+                Button("Export…".localized) {
                     UserDefaults.standard.set(options.quality, forKey: Self.qualityKey)
                     finish(result?.data)
                 }

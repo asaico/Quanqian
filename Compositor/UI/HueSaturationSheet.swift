@@ -23,37 +23,37 @@ struct HueSaturationSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
-                Picker("Range", selection: settings.range) {
-                    ForEach(ColorRange.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                Picker("Range".localized, selection: settings.range) {
+                    ForEach(ColorRange.allCases, id: \.self) { Text($0.rawValue.localized).tag($0) }
                 }
                 .pickerStyle(.menu).frame(width: 160).labelsHidden().disabled(current.colorize)
                 Spacer()
                 samplingControls
             }
-            slider("Hue", value: settings.hue, range: hueRange, unit: "°")
-            slider("Saturation", value: settings.saturation, range: saturationRange, unit: "")
-            slider("Lightness", value: settings.lightness, range: -100...100, unit: "")
+            slider("Hue".localized, value: settings.hue, range: hueRange, unit: "°")
+            slider("Saturation".localized, value: settings.saturation, range: saturationRange, unit: "")
+            slider("Lightness".localized, value: settings.lightness, range: -100...100, unit: "")
             if showsSpectrum {
                 SpectrumEditor(settings: settings)
-                Toggle("Apply outside this range instead", isOn: settings.invertRange)
+                Toggle("Apply outside this range instead".localized, isOn: settings.invertRange)
             }
             HStack(spacing: 18) {
-                Toggle("Colorize", isOn: Binding(get: { current.colorize }, set: { colorize in
+                Toggle("Colorize".localized, isOn: Binding(get: { current.colorize }, set: { colorize in
                     // Photoshop starts colorizing at hue 0, saturation 25.
                     settings.wrappedValue = colorize ? .colorizeStart : HueSaturationSettings()
                 }))
-                Toggle("Preview", isOn: preview)
-                Button("Reset") { settings.wrappedValue = current.colorize ? .colorizeStart : HueSaturationSettings() }
+                Toggle("Preview".localized, isOn: preview)
+                Button("Reset".localized) { settings.wrappedValue = current.colorize ? .colorizeStart : HueSaturationSettings() }
                 Spacer()
             }
             if session.adjustmentOriginal == nil && session.selection != nil {
-                Text("Limited to the selection").font(.callout).foregroundStyle(.secondary)
+                Text("Limited to the selection".localized).font(.callout).foregroundStyle(.secondary)
             }
             Divider()
             HStack {
-                Button("Cancel") { session.cancelHueSaturation() }.keyboardShortcut(.cancelAction)
+                Button("Cancel".localized) { session.cancelHueSaturation() }.keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("OK") { Task { await session.commitHueSaturation() } }
+                Button("OK".localized) { Task { await session.commitHueSaturation() } }
                     .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }
         }
@@ -75,8 +75,8 @@ struct HueSaturationSheet: View {
                     .buttonStyle(.plain)
                     .background(session.hueSampleMode == mode ? Color.accentColor.opacity(0.25) : .clear,
                                 in: RoundedRectangle(cornerRadius: 4))
-                    .help(mode.help)
-                    .accessibilityLabel("\(mode.rawValue) color")
+                    .help(mode.help.localized)
+                    .accessibilityLabel(String(format: "%@ color".localized, mode.rawValue.localized))
                 }
                 Divider().frame(height: 16)
             }
@@ -90,8 +90,8 @@ struct HueSaturationSheet: View {
                 .buttonStyle(.plain)
                 .background(session.hueTargeting ? Color.accentColor.opacity(0.25) : .clear,
                             in: RoundedRectangle(cornerRadius: 4))
-                .help("Targeted adjustment: drag on the image to change that color's saturation, or its hue with Command held")
-                .accessibilityLabel("Targeted adjustment")
+                .help("Targeted adjustment: drag on the image to change that color's saturation, or its hue with Command held".localized)
+                .accessibilityLabel("Targeted adjustment".localized)
             }
         }
     }

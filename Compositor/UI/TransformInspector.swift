@@ -8,43 +8,43 @@ struct TransformInspector: View {
     }
     var body: some View {
         HStack(spacing: 12) {
-          Text(session.transformTargetsMask ? "Transform Mask" : "Transform").font(ToolHeaderStyle.titleFont)
+          Text((session.transformTargetsMask ? "Transform Mask" : "Transform").localized).font(ToolHeaderStyle.titleFont)
               .padding(.leading, 18)
-          Toggle("Auto Select", isOn: $session.transformAutoSelect)
-              .help("Select layers by clicking the canvas. When off, hold Command to select a layer.")
+          Toggle("Auto Select".localized, isOn: $session.transformAutoSelect)
+              .help("Select layers by clicking the canvas. When off, hold Command to select a layer.".localized)
               .accessibilityIdentifier("transformAutoSelect")
-          Toggle("Show Controls", isOn: $session.showsTransformControls)
-              .help("Show the transform box and handles (⌘H). When hidden, drag anywhere to move the layer.")
+          Toggle("Show Controls".localized, isOn: $session.showsTransformControls)
+              .help("Show the transform box and handles (⌘H). When hidden, drag anywhere to move the layer.".localized)
           ScrollView(.horizontal) {
             HStack(spacing: 12) {
                 field("X", value: value.origin.x) { $0.origin.x = $1 }.frame(width: 85)
                 field("Y", value: value.origin.y) { $0.origin.y = $1 }.frame(width: 85)
-                TransformValueField(label: "W", value: value.size.width) { resize($0, width: true) }.frame(width: 85)
-                TransformValueField(label: "H", value: value.size.height) { resize($0, width: false) }.frame(width: 85)
+                TransformValueField(label: "W".localized, value: value.size.width) { resize($0, width: true) }.frame(width: 85)
+                TransformValueField(label: "H".localized, value: value.size.height) { resize($0, width: false) }.frame(width: 85)
                 Toggle(isOn: $session.locksTransformRatio) { Image(systemName: "link") }
-                    .toggleStyle(.button).help("Lock aspect ratio")
-                TransformValueField(label: "Scale", suffix: "%", value: value.scalePercent(pixelSize: pixelSize)) { number in
+                    .toggleStyle(.button).help("Lock aspect ratio".localized)
+                TransformValueField(label: "Scale".localized, suffix: "%", value: value.scalePercent(pixelSize: pixelSize)) { number in
                     change { value in
                         guard number > 0 else { return }
                         value = value.scaled(toPercent: number, pixelSize: pixelSize)
                     }
-                }.frame(width: 110).help("Scale width and height together, about the center")
+                }.frame(width: 110).help("Scale width and height together, about the center".localized)
                 field("°", value: value.rotation) { $0.rotation = $1.truncatingRemainder(dividingBy: 360) }.frame(width: 75)
-                Picker("Sampling", selection: Binding(get: { value.sampling }, set: { sampling in
+                Picker("Sampling".localized, selection: Binding(get: { value.sampling }, set: { sampling in
                     change { $0.sampling = sampling }
                 })) {
-                    ForEach(LayerSampling.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(LayerSampling.allCases, id: \.self) { Text($0.rawValue.localized).tag($0) }
                 }.frame(width: 170)
-                Button("Flip H") { change { $0.flipX.toggle() } }
-                Button("Flip V") { change { $0.flipY.toggle() } }
+                Button("Flip H".localized) { change { $0.flipX.toggle() } }
+                Button("Flip V".localized) { change { $0.flipY.toggle() } }
 
             // Numbers describe an ordinary transform; while distorted, the handles are the controls.
             }.disabled((!session.canTransform && session.transformEdit == nil) || session.transformEdit?.corners != nil)
                 .padding(.horizontal, 18)
           }.scrollIndicators(.hidden)
-          Button("Cancel") { session.cancelTransform() }.keyboardShortcut(.cancelAction)
+          Button("Cancel".localized) { session.cancelTransform() }.keyboardShortcut(.cancelAction)
               .disabled(session.transformEdit == nil)
-          Button("Apply") { session.commitTransform() }.keyboardShortcut(.defaultAction)
+          Button("Apply".localized) { session.commitTransform() }.keyboardShortcut(.defaultAction)
               .disabled(session.transformEdit == nil).accessibilityIdentifier("applyTransform")
         }.padding(.trailing, 18).toolHeaderBar().releasesFocusOnCommit(session)
     }

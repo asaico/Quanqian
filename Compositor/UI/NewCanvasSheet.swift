@@ -17,21 +17,21 @@ struct NewCanvasSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("New canvas").font(.title2.weight(.semibold))
-                Text("A blank space for your next composition.").foregroundStyle(.secondary)
+                Text("New canvas".localized).font(.title2.weight(.semibold))
+                Text("A blank space for your next composition.".localized).foregroundStyle(.secondary)
             }
             HStack(spacing: 16) {
-                dimension("Width", text: $width, field: .width)
+                dimension("Width".localized, text: $width, field: .width)
                 Image(systemName: "multiply").foregroundStyle(.tertiary).padding(.top, 20)
-                dimension("Height", text: $height, field: .height)
+                dimension("Height".localized, text: $height, field: .height)
             }
-            Text(valid ? "Transparent canvas · sRGB" : "Enter whole numbers from 1 to 30,000 pixels.")
+            Text(valid ? "Transparent canvas · sRGB".localized : "Enter whole numbers from 1 to 30,000 pixels.".localized)
                 .font(.callout).foregroundStyle(valid ? Color.secondary : Color.orange)
             HStack(spacing: 10) {
-                Button("Open project") { onOpen?() }.buttonStyle(.bordered)
-                Button("Import image") { session.showsImporter = true }.buttonStyle(.bordered)
+                Button("Open project".localized) { onOpen?() }.buttonStyle(.bordered)
+                Button("Import image".localized) { session.showsImporter = true }.buttonStyle(.bordered)
                 Spacer()
-                Button("Create canvas") {
+                Button("Create canvas".localized) {
                     guard let w = CanvasDocument.validDimension(width),
                           let h = CanvasDocument.validDimension(height) else { return }
                     if let onCreate { onCreate(w, h) }
@@ -79,7 +79,7 @@ struct NewCanvasSheet: View {
                 TextField(title, text: text).textFieldStyle(.plain)
                     .focused($focusedField, equals: field)
                     .accessibilityIdentifier(title.lowercased() + "Input")
-                Text("px").foregroundStyle(.secondary)
+                Text("px".localized).foregroundStyle(.secondary)
             }
             .padding(12).background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 7))
         }
