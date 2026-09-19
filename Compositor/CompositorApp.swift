@@ -1,11 +1,13 @@
 import SwiftUI
+#if canImport(Sparkle)
 import Sparkle
+#endif
 
 @main
 struct CompositorApp: App {
     @NSApplicationDelegateAdaptor(CompositorApplicationDelegate.self) private var applicationDelegate
     private var session: EditorSession { applicationDelegate.session }
-    @State private var localization = LocalizationManager.shared
+    @ObservedObject private var localization = LocalizationManager.shared
 
     init() {
         LocalizationManager.registerDefaults()
@@ -111,51 +113,53 @@ struct CompositorApp: App {
                         Button("Show All".localized) { NSApp.unhideAllApplications(nil) }
                     }
                 }
-                CommandGroup(replacing: .pasteboard) {
-                    // Canvas pixels when the canvas has focus; text fields keep their own editing.
-                    // Cut, Copy and Paste check when chosen rather than through .disabled: what they depend on
-                    // (the pasteboard, the copied pixels, the busy flag) isn't observed, so a disabled state could
-                    // go stale — the first Paste after a Copy used to beep until something else refreshed the menu.
-                    Button("Cut".localized) {
-                        if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: nil) }
-                        else if session.selection != nil, session.canCopyPixels { Task { await session.cutSelection() } }
-                        else { NSSound.beep() }
+                Group {
+                    CommandGroup(replacing: .pasteboard) {
+                        // Canvas pixels when the canvas has focus; text fields keep their own editing.
+                        // Cut, Copy and Paste check when chosen rather than through .disabled: what they depend on
+                        // (the pasteboard, the copied pixels, the busy flag) isn't observed, so a disabled state could
+                        // go stale — the first Paste after a Copy used to beep until something else refreshed the menu.
+                        Button("Cut".localized) {
+                            if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: nil) }
+                            else if session.selection != nil, session.canCopyPixels { Task { await session.cutSelection() } }
+                            else { NSSound.beep() }
+                        }
+                            .keyboardShortcut("x")
+                        Button("Copy".localized) {
+                            if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil) }
+                            else if session.canCopyPixels { session.copySelection() }
+                            else { NSSound.beep() }
+                        }
+                            .keyboardShortcut("c")
+                        Button("Copy Merged".localized) { session.copyMergedSelection() }
+                            .keyboardShortcut("c", modifiers: [.command, .shift]).disabled(!session.canCopyMerged)
+                        Button("Paste".localized) {
+                            if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) }
+                            else if session.canPaste { session.paste() }
+                            else { NSSound.beep() }
+                        }
+                            .keyboardShortcut("v")
                     }
-                        .keyboardShortcut("x")
-                    Button("Copy".localized) {
-                        if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil) }
-                        else if session.canCopyPixels { session.copySelection() }
-                        else { NSSound.beep() }
+                    CommandGroup(after: .pasteboard) {
+                        Divider()
+                        // Photoshop's fill shortcuts; in a text field they keep their text meaning.
+                        Button("Fill with Foreground Color".localized) {
+                            if NSApp.keyWindow?.firstResponder is NSTextView {
+                                NSApp.sendAction(#selector(NSResponder.deleteWordBackward(_:)), to: nil, from: nil)
+                            } else { Task { await session.fillSelection(with: .foreground) } }
+                        }
+                            .keyboardShortcut(.delete, modifiers: .option).disabled(!session.canEditPixels)
+                        Button("Fill with Background Color".localized) {
+                            if NSApp.keyWindow?.firstResponder is NSTextView {
+                                NSApp.sendAction(#selector(NSResponder.deleteToBeginningOfLine(_:)), to: nil, from: nil)
+                            } else { Task { await session.fillSelection(with: .background) } }
+                        }
+                            .keyboardShortcut(.delete, modifiers: .command).disabled(!session.canEditPixels)
+                        Button("Clear Selection Pixels".localized) { Task { await session.clearSelectedPixels() } }
+                            .disabled(session.selection == nil || !session.canEditPixels)
+                        Button("Content-Aware Fill…".localized) { session.beginFilter(.contentAwareFill) }
+                            .keyboardShortcut(.delete, modifiers: .shift).disabled(!session.canContentAwareFill)
                     }
-                        .keyboardShortcut("c")
-                    Button("Copy Merged".localized) { session.copyMergedSelection() }
-                        .keyboardShortcut("c", modifiers: [.command, .shift]).disabled(!session.canCopyMerged)
-                    Button("Paste".localized) {
-                        if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) }
-                        else if session.canPaste { session.paste() }
-                        else { NSSound.beep() }
-                    }
-                        .keyboardShortcut("v")
-                }
-                CommandGroup(after: .pasteboard) {
-                    Divider()
-                    // Photoshop's fill shortcuts; in a text field they keep their text meaning.
-                    Button("Fill with Foreground Color".localized) {
-                        if NSApp.keyWindow?.firstResponder is NSTextView {
-                            NSApp.sendAction(#selector(NSResponder.deleteWordBackward(_:)), to: nil, from: nil)
-                        } else { Task { await session.fillSelection(with: .foreground) } }
-                    }
-                        .keyboardShortcut(.delete, modifiers: .option).disabled(!session.canEditPixels)
-                    Button("Fill with Background Color".localized) {
-                        if NSApp.keyWindow?.firstResponder is NSTextView {
-                            NSApp.sendAction(#selector(NSResponder.deleteToBeginningOfLine(_:)), to: nil, from: nil)
-                        } else { Task { await session.fillSelection(with: .background) } }
-                    }
-                        .keyboardShortcut(.delete, modifiers: .command).disabled(!session.canEditPixels)
-                    Button("Clear Selection Pixels".localized) { Task { await session.clearSelectedPixels() } }
-                        .disabled(session.selection == nil || !session.canEditPixels)
-                    Button("Content-Aware Fill…".localized) { session.beginFilter(.contentAwareFill) }
-                        .keyboardShortcut(.delete, modifiers: .shift).disabled(!session.canContentAwareFill)
                 }
                 CommandMenu("Select".localized) {
                     // Text fields keep their own Select All.
@@ -219,62 +223,87 @@ struct CompositorApp: App {
                             .disabled(!session.canAdjustColors || session.hueSaturation != nil)
                     }
                 }
-                CommandMenu("Layer".localized) {
-                    Menu("New Adjustment Layer".localized) {
-                        ForEach(AdjustmentKind.allCases, id: \.self) { kind in
-                            Button("\(kind.rawValue.localized)…") { session.addAdjustment(kind) }
-                        }
-                    }.disabled(!session.canEditLayers || session.document == nil)
-                    Button("Edit Adjustment…".localized) {
-                        session.adjustmentEditingID = session.activeLayerID
-                    }.disabled(!session.canEditLayers || session.activeLayer?.adjustment == nil)
-                    Divider()
-                    Button((session.canTransformSelection ? "Transform Selection" : "Transform Layer").localized) { session.transformCommand() }
-                        .keyboardShortcut("t").disabled(!session.canTransform && !session.canTransformSelection)
-                    Button((session.selection == nil ? "Duplicate Layer" : "Layer via Copy").localized) { session.layerViaCopy() }
-                        .keyboardShortcut("j").disabled(!session.canCopyPixels && !(session.selection == nil && session.canEditLayers && session.activeLayer?.isGroup == false))
-                    Divider()
-                    Button((session.activeLayer?.maskSourceID == nil ? "Create Clipping Mask" : "Release Clipping Mask").localized) {
-                        if let id = session.activeLayerID { session.toggleClippingMask(id) }
-                    }
-                    .keyboardShortcut("g", modifiers: [.command, .option])
-                    .disabled(session.activeLayerID.map { !session.canToggleClippingMask($0) } ?? true)
-                    Divider()
-                    Button("Group Selected Layers".localized) { session.groupSelectedLayers() }
-                        .keyboardShortcut("g").disabled(!session.canEditLayers)
-                    Button("Move Out of Folder".localized) { session.moveActiveLayerOutOfGroup() }
-                        .disabled(!session.canEditLayers || session.activeLayer?.parentID == nil)
-                    Button("New Blank Layer".localized) { session.addBlankLayer() }
-                        .keyboardShortcut("n", modifiers: [.command, .shift]).disabled(!session.canEditLayers)
-                    Button("Rename Layer…".localized) { session.renamingLayerID = session.activeLayerID }
-                        .disabled(!session.canEditLayers || session.activeLayer == nil)
-                    Button((session.activeLayer?.isVisible == false ? "Show Layer" : "Hide Layer").localized) {
-                        if let id = session.activeLayerID { session.toggleLayerVisibility(id) }
-                    }.disabled(!session.canEditLayers || session.activeLayer == nil)
-                    Divider()
-                    Button("Move Layer Up".localized) { session.moveActiveLayer(by: 1) }
-                        .keyboardShortcut("]").disabled(!session.canMoveActiveLayer(by: 1))
-                    Button("Move Layer Down".localized) { session.moveActiveLayer(by: -1) }
-                        .keyboardShortcut("[").disabled(!session.canMoveActiveLayer(by: -1))
-                    Group {
-                        Button(session.mergeTitle.localized) { session.mergeLayers() }
-                            .keyboardShortcut("e").disabled(!session.canMergeLayers)
-                        Divider()
-                        Button("Flip Layer Horizontal".localized) { session.flipLayers(horizontally: true) }
-                            .disabled(!session.canTransform)
-                        Button("Flip Layer Vertical".localized) { session.flipLayers(horizontally: false) }
-                            .disabled(!session.canTransform)
-                    }
-                    Divider()
-                    Button((session.isMaskSelected && session.activeLayer?.mask != nil ? "Delete Layer Mask" : session.selectedLayerIDs.count > 1 ? "Delete Layers" : "Delete Layer").localized) {
-                        session.deleteLayerOrMask()
-                    }
-                        .disabled(!session.canEditLayers || session.activeLayer == nil)
-                }
+                LayerCommands(session: session)
+                WindowCommands(session: session)
             }
         Settings {
             SettingsView()
         }
     }
 }
+
+private struct LayerCommands: Commands {
+    var session: EditorSession
+
+    var body: some Commands {
+        CommandMenu("Layer".localized) {
+            Menu("New Adjustment Layer".localized) {
+                ForEach(AdjustmentKind.allCases, id: \.self) { kind in
+                    Button("\(kind.rawValue.localized)…") { session.addAdjustment(kind) }
+                }
+            }.disabled(!session.canEditLayers || session.document == nil)
+            Button("Edit Adjustment…".localized) {
+                session.adjustmentEditingID = session.activeLayerID
+            }.disabled(!session.canEditLayers || session.activeLayer?.adjustment == nil)
+            Divider()
+            Button((session.canTransformSelection ? "Transform Selection" : "Transform Layer").localized) { session.transformCommand() }
+                .keyboardShortcut("t").disabled(!session.canTransform && !session.canTransformSelection)
+            Button((session.selection == nil ? "Duplicate Layer" : "Layer via Copy").localized) { session.layerViaCopy() }
+                .keyboardShortcut("j").disabled(!session.canCopyPixels && !(session.selection == nil && session.canEditLayers && session.activeLayer?.isGroup == false))
+            Divider()
+            Button((session.activeLayer?.maskSourceID == nil ? "Create Clipping Mask" : "Release Clipping Mask").localized) {
+                if let id = session.activeLayerID { session.toggleClippingMask(id) }
+            }
+            .keyboardShortcut("g", modifiers: [.command, .option])
+            .disabled(session.activeLayerID.map { !session.canToggleClippingMask($0) } ?? true)
+            Divider()
+            Button("Group Selected Layers".localized) { session.groupSelectedLayers() }
+                .keyboardShortcut("g").disabled(!session.canEditLayers)
+            Button("Move Out of Folder".localized) { session.moveActiveLayerOutOfGroup() }
+                .disabled(!session.canEditLayers || session.activeLayer?.parentID == nil)
+            Button("New Blank Layer".localized) { session.addBlankLayer() }
+                .keyboardShortcut("n", modifiers: [.command, .shift]).disabled(!session.canEditLayers)
+            Button("New Text Layer".localized) { session.addTextLayer() }
+                .keyboardShortcut("t", modifiers: [.command, .shift]).disabled(!session.canEditLayers)
+            Button("Rename Layer…".localized) { session.renamingLayerID = session.activeLayerID }
+                .disabled(!session.canEditLayers || session.activeLayer == nil)
+            Button((session.activeLayer?.isVisible == false ? "Show Layer" : "Hide Layer").localized) {
+                if let id = session.activeLayerID { session.toggleLayerVisibility(id) }
+            }.disabled(!session.canEditLayers || session.activeLayer == nil)
+            Divider()
+            Button("Move Layer Up".localized) { session.moveActiveLayer(by: 1) }
+                .keyboardShortcut("]").disabled(!session.canMoveActiveLayer(by: 1))
+            Button("Move Layer Down".localized) { session.moveActiveLayer(by: -1) }
+                .keyboardShortcut("[").disabled(!session.canMoveActiveLayer(by: -1))
+            Group {
+                Button(session.mergeTitle.localized) { session.mergeLayers() }
+                    .keyboardShortcut("e").disabled(!session.canMergeLayers)
+                Divider()
+                Button("Flip Layer Horizontal".localized) { session.flipLayers(horizontally: true) }
+                    .disabled(!session.canTransform)
+                Button("Flip Layer Vertical".localized) { session.flipLayers(horizontally: false) }
+                    .disabled(!session.canTransform)
+            }
+            Divider()
+            Button((session.isMaskSelected && session.activeLayer?.mask != nil ? "Delete Layer Mask" : session.selectedLayerIDs.count > 1 ? "Delete Layers" : "Delete Layer").localized) {
+                session.deleteLayerOrMask()
+            }
+                .disabled(!session.canEditLayers || session.activeLayer == nil)
+        }
+    }
+}
+
+private struct WindowCommands: Commands {
+    @Bindable var session: EditorSession
+
+    var body: some Commands {
+        CommandMenu("Window".localized) {
+            Toggle("Character & Paragraph".localized, isOn: $session.showsCharacterPanel)
+            Toggle("History".localized, isOn: $session.showsHistoryPanel)
+            Divider()
+            Toggle("Layers".localized, isOn: $session.showsLayersPanel)
+        }
+    }
+}
+
 

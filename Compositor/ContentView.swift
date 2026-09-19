@@ -6,12 +6,14 @@ struct ContentView: View {
     @AppStorage("layersPanelWidth") private var layersPanelWidth = 252.0
     @Bindable var session: EditorSession
     var applicationDelegate: CompositorApplicationDelegate? = nil
-    @State private var localization = LocalizationManager.shared
+    @ObservedObject private var localization = LocalizationManager.shared
     @Environment(\.openWindow) private var openWindow
     @State private var canvasFrame: CGRect = .zero
     @State private var levelsPanel = FloatingPanelController(name: "levelsPanel")
     @State private var adjustmentPanel = FloatingPanelController(name: "adjustmentPanel")
     @State private var filterPanel = FloatingPanelController(name: "filterPanel")
+    @State private var characterPanel = FloatingPanelController(name: "characterPanel")
+    @State private var historyPanel = FloatingPanelController(name: "historyPanel")
     @State private var isDropTargeted = false
     /// The window's width, so the tab strip can use the toolbar's free space.
     @State private var windowWidth: CGFloat = 1180
@@ -74,8 +76,10 @@ struct ContentView: View {
                     if session.document == nil { welcome }
                 }
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("editor")) } action: { canvasFrame = $0 }
-                PanelResizeEdge(width: $layersPanelWidth, range: LayersPanel.widths)
-                LayersPanel(session: session, width: layersPanelWidth)
+                if session.showsLayersPanel {
+                    PanelResizeEdge(width: $layersPanelWidth, range: LayersPanel.widths)
+                    LayersPanel(session: session, width: layersPanelWidth)
+                }
             }
             Divider()
             // Keeps its own height however short the window gets; the tools scroll instead.
@@ -91,21 +95,7 @@ struct ContentView: View {
         .frame(minWidth: 800, minHeight: 520)
         .coordinateSpace(name: "editor")
         .onDrop(of: [UTType.fileURL.identifier, UTType.image.identifier, ProjectWorkspace.layerType], isTargeted: $isDropTargeted) { providers, location in
-            guard session.levels == nil, !session.isProjectBusy, !session.showsNewDocument, !session.showsImporter, session.renamingLayerID == nil else { return false }
-            let point: CGPoint?
-            if let document = session.document, canvasFrame.contains(location) {
-                point = session.viewport.documentPoint(
-                    from: CGPoint(x: location.x - canvasFrame.minX, y: location.y - canvasFrame.minY),
-                    documentSize: document.size)
-            } else { point = nil }
-            if let workspace = applicationDelegate?.workspace {
-                let destination = workspace.current.id
-                guard workspace.canSwitch, workspace.canReceiveDrag(into: destination) else { return false }
-                Task { await workspace.receiveProviders(providers, into: destination, at: point) }
-            } else {
-                Task { await ImageFileDrop.importProviders(providers, into: session, at: point) }
-            }
-            return true
+            handleDrop(providers: providers, location: location)
         }
         .overlay {
             if isDropTargeted, acceptsDrop {
@@ -154,51 +144,53 @@ struct ContentView: View {
                 }.help("Zoom out (⌘−)".localized).disabled(session.document == nil)
             }
         }
-        .onChange(of: session.levels == nil) { _, closed in
-            if closed { levelsPanel.close() }
-            else {
-                levelsPanel.onClose = { session.cancelLevels() }
-                levelsPanel.show(title: "Levels".localized, content: LevelsSheet(session: session))
-            }
-        }
-        .onChange(of: session.hueSaturation == nil) { _, closed in
-            if closed { adjustmentPanel.close() }
-            else {
-                adjustmentPanel.onClose = { session.cancelHueSaturation() }
-                adjustmentPanel.show(title: "Hue/Saturation".localized, content: HueSaturationSheet(session: session))
-            }
-        }
-        .onChange(of: session.filterEdit == nil) { _, closed in
-            if closed { filterPanel.close() }
-            else {
-                filterPanel.onClose = { session.cancelFilter() }
-                filterPanel.show(title: session.filterEdit?.kind.rawValue.localized ?? "Filter".localized, content: FilterSheet(session: session))
-            }
-        }
+        .modifier(FloatingPanelsModifier(
+            session: session,
+            levelsPanel: levelsPanel,
+            adjustmentPanel: adjustmentPanel,
+            filterPanel: filterPanel,
+            characterPanel: characterPanel,
+            historyPanel: historyPanel
+        ))
         .onChange(of: session.document == nil) { _, empty in
             if !empty { session.canvasFocusRequest += 1 }
         }
         .fileImporter(isPresented: $session.showsImporter,
                       allowedContentTypes: [.jpeg, .png, .heic, .tiff], allowsMultipleSelection: true) { result in
-            switch result {
-            case .success(let urls): Task { await session.importImages(urls) }
-            case .failure(let error):
-                if (error as NSError).code != NSUserCancelledError { session.importError = error.localizedDescription }
+            handleImportResult(result)
+        }
+        .modifier(ErrorAlertsModifier(session: session))
+    }
+
+    private func handleImportResult(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            Task { await session.importImages(urls) }
+        case .failure(let error):
+            if (error as NSError).code != NSUserCancelledError {
+                session.importError = error.localizedDescription
             }
         }
-        .alert("Import couldn’t finish".localized, isPresented: Binding(
-            get: { session.importError != nil }, set: { if !$0 { session.importError = nil } })) {
-                Button("OK".localized, role: .cancel) { session.importError = nil }
-            } message: { Text(session.importError ?? "") }
-        .alert("Couldn’t paint".localized, isPresented: Binding(get: { session.brushError != nil },
-            set: { if !$0 { session.brushError = nil } })) {
-                Button("OK".localized) { session.brushError = nil }
-            } message: { Text(session.brushError ?? "") }
-        .alert("Couldn’t crop".localized, isPresented: Binding(get: { session.cropError != nil },
-            set: { if !$0 { session.cropError = nil } })) {
-                Button("OK".localized) { session.cropError = nil }
-            } message: { Text(session.cropError ?? "") }
     }
+
+    private func handleDrop(providers: [NSItemProvider], location: CGPoint) -> Bool {
+        guard session.levels == nil, !session.isProjectBusy, !session.showsNewDocument, !session.showsImporter, session.renamingLayerID == nil else { return false }
+        let point: CGPoint?
+        if let document = session.document, canvasFrame.contains(location) {
+            point = session.viewport.documentPoint(
+                from: CGPoint(x: location.x - canvasFrame.minX, y: location.y - canvasFrame.minY),
+                documentSize: document.size)
+        } else { point = nil }
+        if let workspace = applicationDelegate?.workspace {
+            let destination = workspace.current.id
+            guard workspace.canSwitch, workspace.canReceiveDrag(into: destination) else { return false }
+            Task { await workspace.receiveProviders(providers, into: destination, at: point) }
+        } else {
+            Task { await ImageFileDrop.importProviders(providers, into: session, at: point) }
+        }
+        return true
+    }
+
     private func requestNewCanvas() {
         if let applicationDelegate { Task { await applicationDelegate.projects.newCanvas() } }
         else { session.clearProject() }
@@ -229,7 +221,40 @@ struct ContentView: View {
                 .foregroundStyle(.primary)
                 .accessibilityAddTraits(session.tool == tool ? .isSelected : [])
             }
-            ColorPaletteControls(session: session).padding(.top, 8)
+            VStack(spacing: 6) {
+                Button {
+                    session.showsCharacterPanel.toggle()
+                } label: {
+                    Image(systemName: "character")
+                        .font(.system(size: 15))
+                        .frame(width: 32, height: 32)
+                        .background(session.showsCharacterPanel ? Color.accentColor.opacity(0.2) : .clear, in: RoundedRectangle(cornerRadius: 6))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 6)
+                                .strokeBorder(session.showsCharacterPanel ? Color.accentColor.opacity(0.4) : .clear)
+                        }
+                }
+                .buttonStyle(.plain)
+                .help("Character & Paragraph".localized)
+
+                Button {
+                    session.showsHistoryPanel.toggle()
+                } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 15))
+                        .frame(width: 32, height: 32)
+                        .background(session.showsHistoryPanel ? Color.accentColor.opacity(0.2) : .clear, in: RoundedRectangle(cornerRadius: 6))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 6)
+                                .strokeBorder(session.showsHistoryPanel ? Color.accentColor.opacity(0.4) : .clear)
+                        }
+                }
+                .buttonStyle(.plain)
+                .help("History".localized)
+            }
+            .padding(.top, 4)
+
+            ColorPaletteControls(session: session).padding(.top, 4)
         }
         .padding(.top, 16).padding(.bottom, 12)
         }
@@ -432,3 +457,84 @@ private struct WidthReader: ViewModifier {
         content.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     }
 }
+
+private struct FloatingPanelsModifier: ViewModifier {
+    @Bindable var session: EditorSession
+    var levelsPanel: FloatingPanelController
+    var adjustmentPanel: FloatingPanelController
+    var filterPanel: FloatingPanelController
+    var characterPanel: FloatingPanelController
+    var historyPanel: FloatingPanelController
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: session.levels == nil) { _, closed in
+                if closed { levelsPanel.close() }
+                else {
+                    levelsPanel.onClose = { session.cancelLevels() }
+                    levelsPanel.show(title: "Levels".localized, content: LevelsSheet(session: session))
+                }
+            }
+            .onChange(of: session.hueSaturation == nil) { _, closed in
+                if closed { adjustmentPanel.close() }
+                else {
+                    adjustmentPanel.onClose = { session.cancelHueSaturation() }
+                    adjustmentPanel.show(title: "Hue/Saturation".localized, content: HueSaturationSheet(session: session))
+                }
+            }
+            .onChange(of: session.filterEdit == nil) { _, closed in
+                if closed { filterPanel.close() }
+                else {
+                    filterPanel.onClose = { session.cancelFilter() }
+                    filterPanel.show(title: session.filterEdit?.kind.rawValue.localized ?? "Filter".localized, content: FilterSheet(session: session))
+                }
+            }
+            .onChange(of: session.showsCharacterPanel) { _, shows in
+                if !shows { characterPanel.close() }
+                else {
+                    characterPanel.onClose = { session.showsCharacterPanel = false }
+                    characterPanel.show(title: "Character & Paragraph".localized, content: CharacterParagraphPanel(session: session))
+                }
+            }
+            .onChange(of: session.showsHistoryPanel) { _, shows in
+                if !shows { historyPanel.close() }
+                else {
+                    historyPanel.onClose = { session.showsHistoryPanel = false }
+                    historyPanel.show(title: "History".localized, content: HistoryPanel(session: session))
+                }
+            }
+    }
+}
+
+private struct ErrorAlertsModifier: ViewModifier {
+    @Bindable var session: EditorSession
+
+    func body(content: Content) -> some View {
+        content
+            .alert("Import couldn’t finish".localized, isPresented: Binding(
+                get: { session.importError != nil },
+                set: { if !$0 { session.importError = nil } }
+            )) {
+                Button("OK".localized, role: .cancel) { session.importError = nil }
+            } message: {
+                Text(session.importError ?? "")
+            }
+            .alert("Couldn’t paint".localized, isPresented: Binding(
+                get: { session.brushError != nil },
+                set: { if !$0 { session.brushError = nil } }
+            )) {
+                Button("OK".localized) { session.brushError = nil }
+            } message: {
+                Text(session.brushError ?? "")
+            }
+            .alert("Couldn’t crop".localized, isPresented: Binding(
+                get: { session.cropError != nil },
+                set: { if !$0 { session.cropError = nil } }
+            )) {
+                Button("OK".localized) { session.cropError = nil }
+            } message: {
+                Text(session.cropError ?? "")
+            }
+    }
+}
+

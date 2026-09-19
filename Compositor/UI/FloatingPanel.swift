@@ -58,7 +58,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     var isVisible: Bool { panel?.isVisible == true }
 
     private func makePanel() -> NSPanel {
-        let panel = NSPanel(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        let panel = NSPanel(contentRect: .zero, styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         panel.identifier = identifier
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = true

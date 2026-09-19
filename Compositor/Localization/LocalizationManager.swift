@@ -18,25 +18,26 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 }
 
 @MainActor
-@Observable
-final class LocalizationManager {
+final class LocalizationManager: ObservableObject {
     static let shared = LocalizationManager()
-
     private static let languageKey = "app_language"
 
-    var currentLanguage: AppLanguage {
+    @Published var currentLanguage: AppLanguage {
         didSet {
             UserDefaults.standard.set(currentLanguage.rawValue, forKey: Self.languageKey)
+            LocalizationTable.updateCachedLanguage(currentLanguage)
             applySystemLanguagePreference()
         }
     }
 
     /// 标记语言变更版本号，以便部分需要显式刷新的组件感知
-    var changeToken: Int = 0
+    @Published var changeToken: Int = 0
 
     private init() {
         let saved = UserDefaults.standard.string(forKey: Self.languageKey)
-        self.currentLanguage = saved.flatMap(AppLanguage.init) ?? .simplifiedChinese
+        let initialLang = saved.flatMap(AppLanguage.init) ?? .simplifiedChinese
+        self.currentLanguage = initialLang
+        LocalizationTable.updateCachedLanguage(initialLang)
         applySystemLanguagePreference()
     }
 
@@ -62,34 +63,126 @@ final class LocalizationManager {
     }
 
     var isChinese: Bool {
-        switch currentLanguage {
-        case .simplifiedChinese:
-            return true
-        case .english:
-            return false
+        LocalizationTable.isChinese
+    }
+
+    nonisolated static func isCurrentChinese() -> Bool {
+        LocalizationTable.isChinese
+    }
+
+    nonisolated static func tr(_ key: String) -> String {
+        LocalizationTable.tr(key)
+    }
+
+    nonisolated static func format(_ key: String, _ arguments: CVarArg...) -> String {
+        LocalizationTable.format(key, arguments)
+    }
+
+    func tr(_ key: String) -> String {
+        LocalizationTable.tr(key)
+    }
+
+    func format(_ key: String, _ arguments: CVarArg...) -> String {
+        LocalizationTable.format(key, arguments)
+    }
+}
+
+// MARK: - 独立线程安全词典表（解耦 @Observable 宏）
+enum LocalizationTable {
+    private static let lock = NSLock()
+    private nonisolated(unsafe) static var _cachedIsChinese: Bool = {
+        let saved = UserDefaults.standard.string(forKey: "app_language")
+        let lang = saved.flatMap(AppLanguage.init) ?? .simplifiedChinese
+        switch lang {
+        case .simplifiedChinese: return true
+        case .english: return false
         case .system:
             let preferred = Locale.preferredLanguages.first ?? "zh-Hans"
             return preferred.starts(with: "zh")
         }
+    }()
+
+    static func updateCachedLanguage(_ lang: AppLanguage) {
+        let isZh: Bool
+        switch lang {
+        case .simplifiedChinese: isZh = true
+        case .english: isZh = false
+        case .system:
+            let preferred = Locale.preferredLanguages.first ?? "zh-Hans"
+            isZh = preferred.starts(with: "zh")
+        }
+        lock.lock()
+        _cachedIsChinese = isZh
+        lock.unlock()
     }
 
-    func tr(_ key: String) -> String {
+    static var isChinese: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _cachedIsChinese
+    }
+
+    static func tr(_ key: String) -> String {
         if isChinese {
-            return Self.chineseTable[key] ?? key
+            return chineseTable[key] ?? key
         } else {
-            return Self.englishTable[key] ?? key
+            return englishTable[key] ?? key
         }
     }
 
-    func format(_ key: String, _ arguments: CVarArg...) -> String {
+    static func format(_ key: String, _ arguments: [CVarArg]) -> String {
         let formatStr = tr(key)
         return String(format: formatStr, arguments: arguments)
+    }
+
+    static func format(_ key: String, _ arguments: CVarArg...) -> String {
+        format(key, arguments)
     }
 
     // MARK: - 词典定义
     private static let englishTable: [String: String] = [:]
 
     private static let chineseTable: [String: String] = [
+        // MARK: - 污点修复模式
+        "Content-Aware": "内容识别",
+        "Create Texture": "创建纹理",
+        "Proximity Match": "近似匹配",
+
+        // MARK: - 窗口与浮动面板
+        "Window": "窗口",
+        "Character": "字符",
+        "Paragraph": "段落",
+        "Character & Paragraph": "字符与段落",
+        "History": "历史记录",
+        "Initial State": "初始状态",
+        "Jump to History State": "跳转到历史状态",
+
+        // MARK: - 文字与段落排版
+        "Text": "文字",
+        "New Text Layer": "新建文字图层",
+        "Text Content": "文本内容",
+        "Font": "字体",
+        "Font Size": "字号",
+        "Leading": "行距",
+        "Tracking": "字距",
+        "Vertical Text": "竖排文字",
+        "Horizontal Text": "横排文字",
+        "Text Color": "文字颜色",
+        "Stroke": "描边",
+        "Stroke Width": "描边宽度",
+        "Stroke Color": "描边颜色",
+        "Bold": "加粗",
+        "Italic": "倾斜",
+        "Align Left": "左对齐",
+        "Align Right": "右对齐",
+        "Type text here…": "在此输入文字…",
+        "Add Text Layer": "添加文字图层",
+        "Edit Text": "编辑文字",
+        "Apply Text": "应用文字",
+        "Alignment": "对齐方式",
+        "Editing Selected Layer": "正在编辑所选图层",
+        "No history yet": "暂无历史记录",
+
         // MARK: - 应用与菜单
         "Check for Updates…": "检查更新…",
         "Hide Compositor": "隐藏 Compositor",
@@ -377,7 +470,6 @@ final class LocalizationManager {
         "Untitled %d": "未命名 %d",
 
         // MARK: - 新建画布 (NewCanvasSheet)
-        "New canvas": "新建画布",
         "A blank space for your next composition.": "开始您的新构图创作。",
         "Width": "宽度",
         "Height": "高度",
@@ -548,7 +640,6 @@ final class LocalizationManager {
         "Reorder Layers": "重新排列图层",
         "New Folder": "新建文件夹",
         "Group Layers": "编组图层",
-        "Duplicate Layer": "复制图层",
         "Layer Opacity": "图层不透明度",
         "Layer Blend Mode": "图层混合模式",
         "Flip Horizontal": "水平翻转",
@@ -642,12 +733,13 @@ final class LocalizationManager {
         "Click the image to center this range on that color": "单击图像将当前调整范围中心对齐到该颜色",
         "Click the image to widen this range to include that color": "单击图像扩展调整范围以包含该颜色",
         "Click the image to narrow this range to exclude that color": "单击图像收缩调整范围以排除该颜色",
-        "Original %@ histogram": "原始%@直方图"
+        "Original %@ histogram": "原始%@直方图",
+        "You are currently running the latest version.": "当前已是最新版本。"
     ]
 }
 
 extension String {
     var localized: String {
-        LocalizationManager.shared.tr(self)
+        LocalizationTable.tr(self)
     }
 }

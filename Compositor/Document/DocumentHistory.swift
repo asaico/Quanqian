@@ -47,6 +47,72 @@ final class DocumentHistory {
         savedRevision = revision
     }
 
+    struct HistoryStep: Identifiable, Equatable, Sendable {
+        let id: UUID
+        let name: String
+        let isCurrent: Bool
+        let isFuture: Bool
+        let targetPastCount: Int
+    }
+
+    /// 返回当前所有可见历史步骤（初始状态 + 过去的步骤 + 未来的步骤）
+    var allSteps: [HistoryStep] {
+        var steps: [HistoryStep] = []
+        let totalCount = past.count + future.count
+        guard totalCount > 0 else { return [] }
+
+        // 初始状态 (对应 targetPastCount = 0)
+        let initialId = (past.first?.before.revision) ?? (future.last?.before.revision) ?? UUID()
+        steps.append(HistoryStep(
+            id: initialId,
+            name: "Initial State".localized,
+            isCurrent: past.isEmpty,
+            isFuture: false,
+            targetPastCount: 0
+        ))
+
+        // past 中的步骤 (index 从 0 到 past.count - 1)
+        for (idx, entry) in past.enumerated() {
+            let target = idx + 1
+            steps.append(HistoryStep(
+                id: entry.after.revision,
+                name: entry.name.localized,
+                isCurrent: idx == past.count - 1,
+                isFuture: false,
+                targetPastCount: target
+            ))
+        }
+
+        // future 中的步骤 (future.reversed() 是按照时间推移从近到远)
+        let reversedFuture = Array(future.reversed())
+        for (idx, entry) in reversedFuture.enumerated() {
+            let target = past.count + idx + 1
+            steps.append(HistoryStep(
+                id: entry.after.revision,
+                name: entry.name.localized,
+                isCurrent: false,
+                isFuture: true,
+                targetPastCount: target
+            ))
+        }
+
+        return steps
+    }
+
+    /// 跳转到指定的历史步骤
+    func jump(to step: HistoryStep) -> Snapshot? {
+        guard depth == 0 else { return nil }
+        let targetCount = step.targetPastCount
+        var lastSnapshot: Snapshot? = nil
+        while past.count > targetCount {
+            lastSnapshot = undo()
+        }
+        while past.count < targetCount {
+            lastSnapshot = redo()
+        }
+        return lastSnapshot
+    }
+
     func begin(_ name: String, document: CanvasDocument?, selection: UUID?) {
         if depth == 0 {
             pending = Snapshot(document: document, activeLayerID: selection, revision: revision)

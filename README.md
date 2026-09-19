@@ -1,78 +1,75 @@
-# Compositor
+# 泉嵌 (Quanqian)
 
-Adobe Photoshop costs too much and tools like GIMP don’t feel familiar enough for me to stay in flow. That’s why I built Compositor.
+> **专为漫画嵌字、修图涂白与原生图形合成量身打造的 macOS 图像利器**
 
-The goal was to create a full-featured image editor that is completely free and open source. I use Photoshop for compositing and post-processing, so Compositor is built around that workflow - with the tools needed to create a pixel-perfect final image.
+**泉嵌 (Quanqian)** 是一款基于 macOS 原生架构（SwiftUI + AppKit + Metal 硬件加速）开发的高性能图像编辑工具。
 
-Because it’s open source, you can download the Xcode project and add, remove, or modify any feature to fit your workflow.
+* **“泉”**：取自开发者 **泉** 的名字。
+* **“嵌”**：寓意 **漫画嵌字 (Manga Typesetting & Lettering)**。
 
-## Features
+无论是漫画汉化去字修图、气泡文字排版，还是轻量级平面设计与多图层合成，泉嵌都能提供极速响应、低资源占用与如丝般顺滑的原生操作体验。
 
-### Layers
-- Layers and folders, with blend modes and opacity
-- Layer masks: paint, fill, invert, blur and feather them; link or unlink them to transform a mask on its own
-- Clipping masks and folder masks
-- Adjustment layers: Hue/Saturation, Levels, Curves, Exposure, Gradient Map and Grain
-- Merge Down, Merge Layers and Merge Group (⌘E)
-- Duplicate, rename inline, reorder and nest by drag and drop; Option-drag to duplicate
-- Drag layers between open projects
+---
 
-### Transform
-- Non-destructive move, scale, rotate and flip — images keep their full resolution however small you make them
-- Free distort (⌘-drag a handle), with Shift to lock to an axis
-- Transform several layers, or a whole folder, together
-- Snapping to canvas and layer edges and centers, with guides
-- Exact values for position, size, scale and angle, stepped with the arrow keys
-- Flip Layer and Flip Canvas, horizontal and vertical
+## ✨ 核心特性
 
-### Selections
-- Rectangle and Ellipse Marquee, Freehand and Polygonal Lasso, and Magic Wand
-- Add to and subtract from selections, move the outline, or move and duplicate the pixels inside
-- Load a layer's pixels or a mask as a selection
-- Content-Aware Fill, which can also extend an image past its edges
+### 💬 漫画修嵌与排版
+* **文本与排版**：支持多字体选用、字号字距微调、多文本图层排版，轻松应对漫画气泡文字嵌字。
+* **去字与涂白**：污点修复画笔（内容感知）、仿制图章工具、平滑橡皮擦，高效清理原文字与杂点。
+* **内容识别填充**：智能分析周围像素，快速修补复杂的漫画背景与网点。
 
-### Painting and retouching
-- Brush with size, hardness and opacity, and Shift for straight lines
-- Spot Healing Brush (content-aware)
-- Clone Stamp, aligned or not, sampling one layer or all of them
-- Blur tool, on pixels or masks
-- Gradient tool and Shape tool (rectangles, rounded rectangles and ellipses)
-- Eyedropper and a full color picker
+### 🎨 强大图层与蒙版系统
+* **图层管理**：支持图层文件夹、20+ 种图层混合模式、独立不透明度控制与颜色标记。
+* **图层蒙版与剪贴蒙版**：非破坏性蒙版绘制、羽化、模糊与反向，支持在蒙版与图层间独立变换。
+* **调整图层**：无损应用色相/饱和度、色阶、曲线、曝光度、渐变映射与杂色颗粒。
+* **便捷管理**：支持图层向下合并（⌘E）、跨项目画布直接拖放图层、⌥+拖拽快速复制图层。
 
-### Adjustments and filters
-- Levels (with Auto), Curves, Hue/Saturation, Exposure, Gradient Map, Grain and Invert
-- Gaussian Blur and Motion Blur that spread past a layer's edges
-- Add Noise, Lens Correction and Remove Background
-- Live previews, limited to the selection when there is one
+### 📐 精准变换与选区
+* **非破坏性自由变换**：支持移动、旋转、缩放与透视扭曲（⌘拖拽控制点），图像始终保留全分辨率原始细节。
+* **智能吸附与对齐**：画布边框、中心点与相邻图层智能对齐，配备高精度像素参考线。
+* **丰富选区工具**：矩形/椭圆选区、多边形套索、自由套索与容差可调的魔棒工具。
+* **选区运算**：支持加选、减选、反向，可直接从选区生成图层蒙版。
 
-### Canvas and files
-- Multiple projects in tabs
-- Crop with snapping, and Option for symmetric cropping
-- Canvas Size and Image Size
-- Sharp high-quality downsampling when zoomed out, and a pixel grid when zoomed in
-- Import JPEG, PNG, HEIC and TIFF — including dropped screenshots and images from other apps
-- Export JPEG with a live preview (⇧⌥⌘S); Copy Merged
-- Photoshop-style keyboard shortcuts throughout
+### ⚡ 原生性能与滤镜调色
+* **Metal 硬件加速**：针对 Apple Silicon 原生优化，百万像素级画布秒级实时渲染与无延迟笔刷绘制。
+* **调色与滤镜**：自动色阶直方图、双线性曲线、色相范围定向调节、镜头畸变校正、背景智能去除。
+* **画笔引擎**：可自由调节笔刷尺寸、硬度与不透明度，按住 Shift 轻松绘制平直辅助线。
 
-## Requirements
+### 🌐 简体中文与多语言即时热切换
+* **默认简体中文**：针对国内用户与漫画汉化组习惯，全量精细汉化所有菜单、工具栏与设计术语。
+* **语言切换选项**：偏好设置（⌘,）中可随时在 **简体中文**、**English** 或 **跟随系统** 间即刻热切换，无需重启应用。
 
-- macOS 26
-- Xcode 26 (to build from source)
+---
 
-## Building
+## 💻 系统需求
 
-Open `Compositor.xcodeproj` and run the **Compositor** scheme.
+* **操作系统**：macOS 14.0 或更高版本（推荐 macOS 15+ / macOS Tahoe）
+* **硬件架构**：原生支持 Apple Silicon (M1/M2/M3/M4 系列芯片)
 
-## Releasing
+---
 
-`scripts/release.sh` builds a Release version, signs it with Developer ID, notarizes and staples it, and packages it into `dist/Compositor-<version>.dmg`.
+## 🚀 快速开始
 
-It needs, all kept outside this repository:
+### 方式一：直接运行已打包的应用程序
+下载或直接打开发布包中的 `Quanqian.app`，拖入「应用程序」文件夹即可开始使用。
 
-- a **Developer ID Application** certificate in the login keychain
-- notarization credentials saved with `xcrun notarytool store-credentials "compositor-notary" …`
-- [`create-dmg`](https://github.com/create-dmg/create-dmg) (`brew install create-dmg`)
+### 方式二：从源码构建 (免 Xcode 纯命令行)
+克隆本仓库后，在终端执行自动化打包脚本即可：
+```bash
+./build_package.sh
+```
+构建脚本将全自动编译 C 语言底层像素内核、合成高清应用图标、编译 Swift 模块并完成 Ad-Hoc 代码签名，生成最终可独立分发的 `.app` 与 `.zip`。
 
-## License
+---
 
-MIT — see [LICENSE](LICENSE).
+## 💖 致谢原作者 (Credits & Acknowledgements)
+
+本项目基于原作者 **Robbie Tilton**（[@robbietilton](https://github.com/robbietilton)）及 Wonder Assembly LLC 开源的优秀项目 **[Compositor](https://github.com/robbietilton/Compositor)** 进行二次开发与汉化定制。
+
+非常感谢原作者无私开源的卓越架构设计与精湛的 Swift/Metal 实践，为「泉嵌」提供了坚实纯净的原生图像处理底座！
+
+---
+
+## 📄 开源协议
+
+本项目沿用原开源协议：[MIT License](LICENSE)。

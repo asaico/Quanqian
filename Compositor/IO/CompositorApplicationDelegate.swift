@@ -1,6 +1,22 @@
 import AppKit
+#if canImport(Sparkle)
 import Sparkle
+#else
+@MainActor
+final class SPUStandardUpdaterController: NSObject {
+    init(startingUpdater: Bool, updaterDelegate: Any?, userDriverDelegate: Any?) {}
+    func startUpdater() {}
+    func checkForUpdates(_ sender: Any?) {
+        let alert = NSAlert()
+        alert.messageText = "Check for Updates…".localized
+        alert.informativeText = "You are currently running the latest version.".localized
+        alert.addButton(withTitle: "OK".localized)
+        alert.runModal()
+    }
+}
+#endif
 
+@MainActor
 final class CompositorApplicationDelegate: NSObject, NSApplicationDelegate {
     let workspace = ProjectWorkspace()
     var session: EditorSession { workspace.current.session }

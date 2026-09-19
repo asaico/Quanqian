@@ -3,7 +3,7 @@ import SwiftUI
 struct ImageLayer: Identifiable, Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id && lhs.name == rhs.name && lhs.isVisible == rhs.isVisible && lhs.transform == rhs.transform
-            && lhs.asset?.image === rhs.asset?.image && lhs.parentID == rhs.parentID && lhs.isGroup == rhs.isGroup && lhs.opacity == rhs.opacity && lhs.blendMode == rhs.blendMode && lhs.mask == rhs.mask && lhs.maskSourceID == rhs.maskSourceID && lhs.adjustment == rhs.adjustment && lhs.shape == rhs.shape
+            && lhs.asset?.image === rhs.asset?.image && lhs.parentID == rhs.parentID && lhs.isGroup == rhs.isGroup && lhs.opacity == rhs.opacity && lhs.blendMode == rhs.blendMode && lhs.mask == rhs.mask && lhs.maskSourceID == rhs.maskSourceID && lhs.adjustment == rhs.adjustment && lhs.shape == rhs.shape && lhs.text == rhs.text
     }
     let id: UUID
     var asset: ImportedImage?
@@ -20,6 +20,8 @@ struct ImageLayer: Identifiable, Equatable {
     var adjustment: LayerAdjustment?
     /// Set on layers the Shape tool made; see `liveShape`.
     var shape: LayerShape?
+    /// Set on text layers; see `liveText`.
+    var text: LayerText?
     var size: CGSize { transform.size }
 
     init(asset: ImportedImage, origin: CGPoint) {
@@ -36,7 +38,7 @@ struct ImageLayer: Identifiable, Equatable {
         self.name = name
     }
 
-    init(id: UUID, asset: ImportedImage?, name: String, isVisible: Bool, transform: LayerTransform, parentID: UUID? = nil, isGroup: Bool = false, opacity: Double = 1, blendMode: LayerBlendMode = .normal, mask: LayerMask? = nil, maskSourceID: UUID? = nil, adjustment: LayerAdjustment? = nil, shape: LayerShape? = nil) {
+    init(id: UUID, asset: ImportedImage?, name: String, isVisible: Bool, transform: LayerTransform, parentID: UUID? = nil, isGroup: Bool = false, opacity: Double = 1, blendMode: LayerBlendMode = .normal, mask: LayerMask? = nil, maskSourceID: UUID? = nil, adjustment: LayerAdjustment? = nil, shape: LayerShape? = nil, text: LayerText? = nil) {
         self.id = id
         self.asset = asset
         self.name = name
@@ -50,6 +52,7 @@ struct ImageLayer: Identifiable, Equatable {
         self.maskSourceID = maskSourceID
         self.adjustment = adjustment
         self.shape = shape
+        self.text = text
     }
 }
 
@@ -433,9 +436,19 @@ final class EditorSession {
     @ObservationIgnored var refreshCanvasPreview: (() -> Void)?
     var isMaskSelected = false
     var selectedLayerIDs: Set<UUID> = []
+    var showsCharacterPanel: Bool = false
+    var showsHistoryPanel: Bool = false
+    var showsLayersPanel: Bool = true
+    var activeTextStyle: LayerTextStyle = LayerTextStyle()
+
     var activeLayerID: UUID? {
         didSet {
-            if activeLayerID != oldValue { isMaskSelected = false }
+            if activeLayerID != oldValue {
+                isMaskSelected = false
+                if let text = activeLayer?.liveText {
+                    activeTextStyle = text.style
+                }
+            }
             selectedLayerIDs = activeLayerID.map { [$0] } ?? []
         }
     }
@@ -469,6 +482,9 @@ final class EditorSession {
         document = snapshot.document
         activeLayerID = snapshot.activeLayerID
         isMaskSelected = keepMaskTarget && activeLayer?.mask != nil
+        if let text = activeLayer?.liveText {
+            activeTextStyle = text.style
+        }
         if changedCanvas, let document { viewport.fit(documentSize: document.size) }
     }
 
@@ -487,7 +503,7 @@ final class EditorSession {
     func addBlankLayer() {
         guard canEditLayers, let document else { return }
         let names = Set(document.layers.map(\.name))
-        let prefix = LocalizationManager.shared.isChinese ? "图层" : "Layer"
+        let prefix = LocalizationTable.isChinese ? "图层" : "Layer"
         var number = 1
         while names.contains("\(prefix) \(number)") { number += 1 }
         var layer = ImageLayer(name: "\(prefix) \(number)", blankSize: document.size)
@@ -670,7 +686,7 @@ final class EditorSession {
         beginEdit("New Canvas")
         defer { endEdit() }
         var document = CanvasDocument(width: width, height: height)
-        let layerPrefix = LocalizationManager.shared.isChinese ? "图层" : "Layer"
+        let layerPrefix = LocalizationTable.isChinese ? "图层" : "Layer"
         let layer = emptyLayer ? ImageLayer(name: "\(layerPrefix) 1", blankSize: document.size) : nil
         if let layer { document.layers = [layer] }
         self.document = document
@@ -689,4 +705,74 @@ final class EditorSession {
         guard let document else { return }
         viewport.setZoom(value, anchoredAt: anchor ?? viewport.center, documentSize: document.size)
     }
+
+    // MARK: - 文字图层与排版支持
+
+    /// 自动生成下一个文字图层名称，如 "Text 1" 或 "文字 1"
+    func nextTextLayerName() -> String {
+        let prefix = LocalizationTable.isChinese ? "文字" : "Text"
+        let names = Set(document?.layers.map(\.name) ?? [])
+        var number = 1
+        while names.contains("\(prefix) \(number)") { number += 1 }
+        return "\(prefix) \(number)"
+    }
+
+    /// 在画布中心添加一个新的文字图层
+    func addTextLayer(initialText: String? = nil, isVertical: Bool? = nil) {
+        guard canEditLayers, let document else { return }
+        var style = activeTextStyle
+        if let initialText { style.text = initialText }
+        if let isVertical { style.isVertical = isVertical }
+        activeTextStyle = style
+
+        do {
+            let image = try LayerText.renderImage(style: style)
+            let canvasCenter = CGPoint(x: document.width / 2, y: document.height / 2)
+            let origin = CGPoint(
+                x: max(0, canvasCenter.x - CGFloat(image.width) / 2).rounded(),
+                y: max(0, canvasCenter.y - CGFloat(image.height) / 2).rounded()
+            )
+            let layerName = nextTextLayerName()
+            addPixelLayer(
+                image,
+                at: origin,
+                name: layerName,
+                editName: "New Text Layer",
+                dropsSelection: false,
+                text: LayerText(style: style, image: image)
+            )
+            showsCharacterPanel = true
+        } catch {
+            brushError = error.localizedDescription
+        }
+    }
+
+    /// 实时更新当前选中的文字图层样式并重绘
+    func updateActiveLayerText(style: LayerTextStyle) {
+        activeTextStyle = style
+        guard canEditLayers, let index = document?.layers.firstIndex(where: { $0.id == activeLayerID }),
+              let layer = document?.layers[index], layer.text != nil else { return }
+
+        do {
+            let newImage = try LayerText.renderImage(style: style)
+            let thumbnail = try PixelInvert.thumbnail(of: newImage)
+            var newTransform = layer.transform
+            newTransform.size = CGSize(width: newImage.width, height: newImage.height)
+
+            beginEdit("Edit Text")
+            document?.layers[index].asset = ImportedImage(image: newImage, thumbnail: thumbnail, name: layer.asset?.name ?? layer.name)
+            document?.layers[index].text = LayerText(style: style, image: newImage)
+            document?.layers[index].transform = newTransform
+            endEdit()
+        } catch {
+            brushError = error.localizedDescription
+        }
+    }
+
+    /// 跳转到历史记录指定步骤
+    func jumpToHistory(step: DocumentHistory.HistoryStep) {
+        guard canUseHistory, let snapshot = history.jump(to: step) else { return }
+        restore(snapshot)
+    }
 }
+
