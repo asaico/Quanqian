@@ -22,5 +22,16 @@ extension View {
             .controlSize(.regular)
             .frame(height: ToolHeaderStyle.height)
             .fixedSize(horizontal: false, vertical: true)
+            .background(WindowDragView())
     }
+}
+
+/// A transparent NSView that allows dragging the window when clicked on empty background areas.
+struct WindowDragView: NSViewRepresentable {
+    func makeNSView(context: Context) -> WindowDragNSView { WindowDragNSView() }
+    func updateNSView(_ nsView: WindowDragNSView, context: Context) {}
+}
+
+final class WindowDragNSView: NSView {
+    override var mouseDownCanMoveWindow: Bool { true }
 }

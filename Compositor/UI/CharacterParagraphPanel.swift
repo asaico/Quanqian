@@ -3,6 +3,8 @@ import AppKit
 
 struct CharacterParagraphPanel: View {
     @Bindable var session: EditorSession
+    var isFloating: Bool = false
+    var showHeader: Bool = true
 
     // 常用排版字体（优先中文友好字体）
     private let commonFonts: [(name: String, displayName: String)] = [
@@ -16,7 +18,21 @@ struct CharacterParagraphPanel: View {
     ]
 
     var body: some View {
-        ScrollView {
+        VStack(alignment: .leading, spacing: 0) {
+            if isFloating || showHeader {
+                HStack(spacing: 6) {
+                    Image(systemName: "character").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("Character & Paragraph".localized)
+                        .font(.system(size: 11, weight: .semibold))
+                    Spacer()
+                    PanelHeaderOptionsMenu(session: session, panel: .character)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 32)
+                .background(Color(white: 0.12))
+                Divider()
+            }
+            ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 // 文本内容输入与快速添加
                 VStack(alignment: .leading, spacing: 6) {
@@ -54,6 +70,16 @@ struct CharacterParagraphPanel: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(!session.canEditLayers)
+
+                        Button {
+                            session.beginCanvasTextEditing()
+                        } label: {
+                            Label("Edit on Canvas".localized, systemImage: "pencil.and.outline")
+                                .font(.system(size: 11))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(session.activeLayer?.liveText == nil)
 
                         Spacer()
                     }
@@ -100,6 +126,13 @@ struct CharacterParagraphPanel: View {
                             ), format: .number.precision(.fractionLength(0)))
                             .frame(width: 50)
                             .textFieldStyle(.roundedBorder)
+                            .scrollableNumber(value: Binding(
+                                get: { Double(session.activeTextStyle.fontSize) },
+                                set: {
+                                    session.activeTextStyle.fontSize = CGFloat(max(8, min(400, $0)))
+                                    updateLayerIfText()
+                                }
+                            ), range: 8...400, step: 1)
                         }
 
                         Spacer()
@@ -155,12 +188,17 @@ struct CharacterParagraphPanel: View {
 
                         Spacer()
 
-                        // 竖排切换（漫画嵌字关键）
+                        // 竖排切换（漫画嵌字关键）：行距与字距自动对调
                         Picker("", selection: Binding(
                             get: { session.activeTextStyle.isVertical },
-                            set: {
-                                session.activeTextStyle.isVertical = $0
-                                updateLayerIfText()
+                            set: { newVertical in
+                                if session.activeTextStyle.isVertical != newVertical {
+                                    session.activeTextStyle.isVertical = newVertical
+                                    let prevLeading = session.activeTextStyle.leading
+                                    session.activeTextStyle.leading = session.activeTextStyle.tracking
+                                    session.activeTextStyle.tracking = prevLeading
+                                    updateLayerIfText()
+                                }
                             }
                         )) {
                             Text("Horizontal Text".localized).tag(false)
@@ -200,9 +238,9 @@ struct CharacterParagraphPanel: View {
                     // 行距与字距
                     HStack(spacing: 12) {
                         HStack(spacing: 6) {
-                            Text("Leading".localized)
+                            Text((session.activeTextStyle.isVertical ? "Leading (Column Gap)" : "Leading").localized)
                                 .font(.system(size: 11))
-                                .frame(width: 48, alignment: .leading)
+                                .frame(width: 60, alignment: .leading)
                             TextField("", value: Binding<Double>(
                                 get: { Double(session.activeTextStyle.leading) },
                                 set: {
@@ -212,13 +250,21 @@ struct CharacterParagraphPanel: View {
                             ), format: .number.precision(.fractionLength(0)))
                             .frame(width: 50)
                             .textFieldStyle(.roundedBorder)
+                            .scrollableNumber(value: Binding(
+                                get: { Double(session.activeTextStyle.leading) },
+                                set: {
+                                    session.activeTextStyle.leading = CGFloat(max(0, min(100, $0)))
+                                    updateLayerIfText()
+                                }
+                            ), range: 0...100, step: 1)
                         }
 
                         Spacer()
 
                         HStack(spacing: 6) {
-                            Text("Tracking".localized)
+                            Text((session.activeTextStyle.isVertical ? "Tracking (Char Gap)" : "Tracking").localized)
                                 .font(.system(size: 11))
+                                .frame(width: 60, alignment: .leading)
                             TextField("", value: Binding<Double>(
                                 get: { Double(session.activeTextStyle.tracking) },
                                 set: {
@@ -228,6 +274,13 @@ struct CharacterParagraphPanel: View {
                             ), format: .number.precision(.fractionLength(0)))
                             .frame(width: 50)
                             .textFieldStyle(.roundedBorder)
+                            .scrollableNumber(value: Binding(
+                                get: { Double(session.activeTextStyle.tracking) },
+                                set: {
+                                    session.activeTextStyle.tracking = CGFloat(max(-20, min(100, $0)))
+                                    updateLayerIfText()
+                                }
+                            ), range: -20...100, step: 1)
                         }
                     }
                 }
@@ -280,12 +333,22 @@ struct CharacterParagraphPanel: View {
                                 .font(.system(size: 11).monospacedDigit())
                                 .frame(width: 38, alignment: .trailing)
                         }
+                        .scrollableNumber(value: Binding(
+                            get: { Double(session.activeTextStyle.strokeWidth) },
+                            set: {
+                                session.activeTextStyle.strokeWidth = CGFloat($0)
+                                updateLayerIfText()
+                            }
+                        ), range: 1...20, step: 1)
                     }
                 }
             }
-            .padding(14)
+                .padding(14)
+            }
         }
-        .frame(width: 280, height: 460)
+        .frame(width: isFloating ? 290 : nil, height: isFloating ? 480 : nil)
+        .frame(maxWidth: isFloating ? nil : .infinity, maxHeight: isFloating ? nil : .infinity)
+        .background(Color(white: 0.14))
     }
 
     private func updateLayerIfText() {

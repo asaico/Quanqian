@@ -74,6 +74,10 @@ extension EditorSession {
         guard canEditLayers, let document, document.layers.count < 10_000 else { return }
         let byID = Dictionary(uniqueKeysWithValues: document.layers.map { ($0.id, $0) })
         let selected = selectedLayerIDs.intersection(Set(byID.keys))
+        guard !selected.isEmpty else {
+            addGroup()
+            return
+        }
         func ancestors(_ id: UUID) -> [UUID?] {
             var result: [UUID?] = []
             var parent = byID[id]?.parentID
@@ -113,6 +117,7 @@ extension EditorSession {
         beginEdit("Group Layers")
         self.document?.layers = layers
         activeLayerID = group.id
+        selectedLayerIDs = [group.id]
         if let parent { collapsedGroupIDs.remove(parent) }
         endEdit()
     }

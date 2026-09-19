@@ -45,6 +45,10 @@ struct BrushControls: View {
                 .frame(width: 48).textFieldStyle(.roundedBorder)
                 .arrowSteps(value: { Double(session.brushSettings.diameter) },
                             change: { session.brushSettings.diameter = CGFloat(min(2000, max(1, $0))) })
+                .scrollableNumber(value: Binding<Double>(
+                    get: { Double(session.brushSettings.diameter) },
+                    set: { session.brushSettings.diameter = CGFloat(min(2000, max(1, $0))) }
+                ), range: 1...2000, step: 1)
                 .onChange(of: session.brushSettings.diameter) { _, value in
                     session.brushSettings.diameter = value.isFinite ? min(2000, max(1, value)) : 40
                 }
@@ -57,6 +61,10 @@ struct BrushControls: View {
                 .frame(width: 42).textFieldStyle(.roundedBorder)
                 .arrowSteps(value: { Double(session.brushSettings.hardness * 100) },
                             change: { session.brushSettings.hardness = CGFloat(min(1, max(0, $0 / 100))) })
+                .scrollableNumber(value: Binding<Double>(
+                    get: { Double(session.brushSettings.hardness * 100) },
+                    set: { session.brushSettings.hardness = CGFloat(min(1, max(0, $0 / 100))) }
+                ), range: 0...100, step: 1)
                 .unitSuffix("%")
             Text((session.tool == .blur ? "Strength" : "Opacity").localized)
             Slider(value: $session.brushSettings.opacity, in: 0.01...1).frame(width: 100)
@@ -66,6 +74,10 @@ struct BrushControls: View {
                 .frame(width: 42).textFieldStyle(.roundedBorder)
                 .arrowSteps(value: { Double(session.brushSettings.opacity * 100) },
                             change: { session.brushSettings.opacity = CGFloat(min(100, max(1, $0)) / 100) })
+                .scrollableNumber(value: Binding<Double>(
+                    get: { Double(session.brushSettings.opacity * 100) },
+                    set: { session.brushSettings.opacity = CGFloat(min(100, max(1, $0)) / 100) }
+                ), range: 1...100, step: 1)
                 .help("Press 1–9 for 10–90%, 0 for 100%".localized)
                 .unitSuffix("%")
             if session.isMaskSelected {

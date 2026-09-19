@@ -101,3 +101,36 @@ struct GradientToolIcon: View {
         .accessibilityHidden(true)
     }
 }
+
+struct PaintBucketControls: View {
+    @Bindable var session: EditorSession
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text("Paint Bucket".localized).font(ToolHeaderStyle.titleFont)
+
+            Button {
+                Task { await session.fillSelection(with: .foreground) }
+            } label: {
+                Label("Fill Foreground".localized, systemImage: "drop.fill")
+            }
+            .help("Fill selection or layer with foreground color (⌥⌫)".localized)
+
+            Button {
+                Task { await session.fillSelection(with: .background) }
+            } label: {
+                Label("Fill Background".localized, systemImage: "drop")
+            }
+            .help("Fill selection or layer with background color (⌘⌫)".localized)
+
+            Spacer()
+
+            if session.isMaskSelected {
+                Text("Mask".localized).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 18).toolHeaderBar()
+        .disabled(session.showsBusy || session.document == nil || !session.canEditPixels)
+    }
+}
+

@@ -935,6 +935,7 @@ final class CanvasView: NSView {
             : session.tool == .move ? window.map { transformCursor(at: convert($0.mouseLocationOutsideOfEventStream, from: nil)) } ?? .arrow
             : session.tool == .idle ? .arrow
             : session.tool == .zoom ? (optionHeld ? Self.zoomOutCursor : Self.zoomInCursor)
+            : session.tool == .text ? .iBeam
             : .crosshair
         addCursorRect(bounds, cursor: cursor)
         guard session.tool == .crop, !spaceHeld else { return }
@@ -1172,6 +1173,16 @@ final class CanvasView: NSView {
         window?.makeFirstResponder(self)
         guard session.document != nil, !session.isProjectBusy, !session.isImporting else { return }
         let point = convert(event.locationInWindow, from: nil)
+        if event.clickCount == 2, !spaceHeld, let document = session.document {
+            let docPoint = session.viewport.documentPoint(from: point, documentSize: document.size)
+            if let active = session.activeLayer, active.liveText != nil, active.transform.contains(docPoint) {
+                session.beginCanvasTextEditing(layerID: active.id)
+                return
+            } else if let hit = document.layers.reversed().first(where: { $0.liveText != nil && $0.transform.contains(docPoint) }) {
+                session.beginCanvasTextEditing(layerID: hit.id)
+                return
+            }
+        }
         if session.levels?.sampleMode != nil, !spaceHeld, let document = session.document {
             session.sampleLevels(at: session.viewport.documentPoint(from: point, documentSize: document.size))
             FloatingPanelController.refocus(NSUserInterfaceItemIdentifier("levelsPanel"))
@@ -1224,7 +1235,18 @@ final class CanvasView: NSView {
             lassoMouseDown(at: point, event: event)
             refreshLassoCursor()
         } else if session.tool == .gradient {
-            beginGradientDrag(at: point)
+            if session.gradientSubTool == .paintBucket {
+                Task { await session.fillSelection(with: .foreground) }
+            } else {
+                beginGradientDrag(at: point)
+            }
+        } else if session.tool == .text, let document = session.document {
+            let docPoint = session.viewport.documentPoint(from: point, documentSize: document.size)
+            if let hit = document.layers.reversed().first(where: { $0.liveText != nil && $0.transform.contains(docPoint) }) {
+                session.beginCanvasTextEditing(layerID: hit.id)
+            } else {
+                session.addTextLayer(at: docPoint, isVertical: session.textToolOrientation == .vertical, startEditing: true)
+            }
         } else if session.tool == .shape, let document = session.document {
             session.beginShape(at: session.viewport.documentPoint(from: point, documentSize: document.size))
         } else if session.tool == .crop {
@@ -1432,8 +1454,19 @@ final class CanvasView: NSView {
     override func scrollWheel(with event: NSEvent) {
         guard transformDrag == nil, cropDrag == nil, session.brushStroke == nil, session.warpStroke == nil else { return }
         guard session.document != nil else { return }
-        if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.option) {
-            session.zoom(to: session.viewport.zoom * exp(-event.scrollingDeltaY * 0.015),
+        let trigger = AppPreferencesStorage.loadZoomTrigger()
+        let shouldZoom: Bool = {
+            switch trigger {
+            case .command: return event.modifierFlags.contains(.command) || event.modifierFlags.contains(.option)
+            case .option: return event.modifierFlags.contains(.option)
+            case .direct: return true
+            case .disabled: return false
+            }
+        }()
+        if shouldZoom {
+            let sens = AppPreferencesStorage.loadZoomSensitivity()
+            let factor = (AppPreferencesStorage.loadZoomInverted() ? -1.0 : 1.0) * sens * 0.015
+            session.zoom(to: session.viewport.zoom * exp(-event.scrollingDeltaY * factor),
                          anchor: convert(event.locationInWindow, from: nil))
         } else {
             let multiplier: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 12
@@ -1526,7 +1559,18 @@ final class CanvasView: NSView {
             case "e": session.selectTool(.brush); session.brushMode = .erase
             case "j": session.selectTool(.spotHealing)
             case "s": session.selectTool(.cloneStamp)
-            case "g": session.selectTool(.gradient)
+            case "g":
+                if event.modifierFlags.contains(.shift), session.tool == .gradient {
+                    session.gradientSubTool = (session.gradientSubTool == .gradient ? .paintBucket : .gradient)
+                } else {
+                    session.selectTool(.gradient)
+                }
+            case "t":
+                if event.modifierFlags.contains(.shift), session.tool == .text {
+                    session.textToolOrientation = (session.textToolOrientation == .horizontal ? .vertical : .horizontal)
+                } else {
+                    session.selectTool(.text)
+                }
             case "u":
                 if event.modifierFlags.contains(.shift), session.tool == .shape { session.toggleShapeKind() }
                 else { session.selectTool(.shape) }

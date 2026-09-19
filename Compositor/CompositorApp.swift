@@ -298,10 +298,18 @@ private struct WindowCommands: Commands {
 
     var body: some Commands {
         CommandMenu("Window".localized) {
-            Toggle("Character & Paragraph".localized, isOn: $session.showsCharacterPanel)
-            Toggle("History".localized, isOn: $session.showsHistoryPanel)
-            Divider()
-            Toggle("Layers".localized, isOn: $session.showsLayersPanel)
+            Toggle("Layers".localized, isOn: Binding(
+                get: { session.showsLayersPanel },
+                set: { _ in session.togglePanel(.layers) }
+            ))
+            Toggle("Character & Paragraph".localized, isOn: Binding(
+                get: { session.showsCharacterPanel },
+                set: { _ in session.togglePanel(.character) }
+            ))
+            Toggle("History".localized, isOn: Binding(
+                get: { session.showsHistoryPanel },
+                set: { _ in session.togglePanel(.history) }
+            ))
         }
     }
 }

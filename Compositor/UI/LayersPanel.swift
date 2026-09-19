@@ -3,18 +3,26 @@ import SwiftUI
 struct LayersPanel: View {
     @Bindable var session: EditorSession
     /// Dragging the panel's left edge sets it, within `widths`.
-    var width: CGFloat = 252
-    static let widths: ClosedRange<Double> = 202...352
+    var width: CGFloat? = nil
+    var showHeader: Bool = true
+    static let widths: ClosedRange<Double> = 202...400
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Layers".localized).font(.system(size: 12, weight: .semibold))
-                Spacer()
-                Text("\(session.document?.layers.count ?? 0)").font(.caption.monospacedDigit()).foregroundStyle(.tertiary)
-                    .accessibilityIdentifier("layerCount")
-            }.padding(18)
-            Divider()
+            if showHeader {
+                HStack(spacing: 6) {
+                    Image(systemName: "square.3.layers.3d").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("Layers".localized).font(.system(size: 11, weight: .semibold))
+                    Spacer()
+                    Text("\(session.document?.layers.count ?? 0)").font(.caption.monospacedDigit()).foregroundStyle(.tertiary)
+                        .accessibilityIdentifier("layerCount")
+                    PanelHeaderOptionsMenu(session: session, panel: .layers)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 32)
+                .background(Color(white: 0.12))
+                Divider()
+            }
             LayerAppearanceControls(session: session, layerID: session.activeLayerID).id(session.activeLayerID)
             Divider()
             if let layers = session.document?.layers, !layers.isEmpty {

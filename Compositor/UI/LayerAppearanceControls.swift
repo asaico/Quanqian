@@ -26,6 +26,10 @@ struct LayerAppearanceControls: View {
                         .arrowSteps(editing: focused, stepper: stepper,
                                     value: { ((session.activeLayer?.opacity ?? 1) * 100).rounded() },
                                     change: { step($0) })
+                        .scrollableNumber(value: Binding(
+                            get: { ((session.activeLayer?.opacity ?? 1) * 100).rounded() },
+                            set: { step($0) }
+                        ), range: 0...100, step: 1)
                     Text("%").font(.caption)
                 }
             }

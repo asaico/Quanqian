@@ -2,8 +2,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
-    /// The Layers panel's width, remembered across launches.
-    @AppStorage("layersPanelWidth") private var layersPanelWidth = 252.0
+    /// The Layers/Right sidebar panel's width, remembered across launches.
+    @AppStorage("layersPanelWidth") private var rightSidebarWidth = 252.0
+    @AppStorage("leftSidebarWidth") private var leftSidebarWidth = 252.0
     @Bindable var session: EditorSession
     var applicationDelegate: CompositorApplicationDelegate? = nil
     @ObservedObject private var localization = LocalizationManager.shared
@@ -37,7 +38,15 @@ struct ContentView: View {
                 Divider()
             }
             if session.tool == .gradient {
-                GradientControls(session: session)
+                if session.gradientSubTool == .paintBucket {
+                    PaintBucketControls(session: session)
+                } else {
+                    GradientControls(session: session)
+                }
+                Divider()
+            }
+            if session.tool == .text {
+                TextToolControls(session: session)
                 Divider()
             }
             if session.tool == .shape {
@@ -71,14 +80,21 @@ struct ContentView: View {
             HStack(spacing: 0) {
                 toolRail
                 Divider()
-                ZStack {
+                if session.showsLeftSidebar {
+                    DockableSidebarView(session: session, location: .leftSidebar, width: leftSidebarWidth)
+                    PanelResizeEdge(width: $leftSidebarWidth, range: LayersPanel.widths, isLeading: false)
+                }
+                ZStack(alignment: .topLeading) {
                     EditorCanvas(session: session)
                     if session.document == nil { welcome }
+                    if session.isEditingTextOnCanvas, let active = session.activeLayer, active.liveText != nil {
+                        OnCanvasTextEditor(session: session, layer: active)
+                    }
                 }
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("editor")) } action: { canvasFrame = $0 }
-                if session.showsLayersPanel {
-                    PanelResizeEdge(width: $layersPanelWidth, range: LayersPanel.widths)
-                    LayersPanel(session: session, width: layersPanelWidth)
+                if session.showsRightSidebar {
+                    PanelResizeEdge(width: $rightSidebarWidth, range: LayersPanel.widths, isLeading: true)
+                    DockableSidebarView(session: session, location: .rightSidebar, width: rightSidebarWidth)
                 }
             }
             Divider()
@@ -118,11 +134,7 @@ struct ContentView: View {
             ToolbarSpacer(.fixed, placement: .navigation)
             if let workspace = applicationDelegate?.workspace {
                 ToolbarItem(placement: .navigation) {
-                    ProjectTabStrip(workspace: workspace)
-                        // As wide as the toolbar allows: the window less the traffic lights and New button before it
-                        // and the zoom controls after it. Bounded, so adding tabs never pushes those aside; the
-                        // strip scrolls instead.
-                        .frame(width: max(200, windowWidth - 352), height: 34, alignment: .center)
+                    ProjectTabStrip(workspace: workspace, maxAvailableWidth: max(200, windowWidth - 352))
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
@@ -202,9 +214,21 @@ struct ContentView: View {
             ForEach(NavigationTool.allCases.filter { $0 != .idle }, id: \.self) { tool in
                 Button { session.selectTool(tool) } label: {
                     Group {
-                        if tool == .gradient { GradientToolIcon().frame(width: 18, height: 18) }
+                        if tool == .gradient {
+                            if session.gradientSubTool == .paintBucket {
+                                Image(systemName: "drop.triangle.fill").font(.system(size: 16))
+                            } else {
+                                GradientToolIcon().frame(width: 18, height: 18)
+                            }
+                        }
                         else if tool == .cloneStamp { CloneStampToolIcon().frame(width: 18, height: 18) }
                         else if tool == .lasso, session.lassoKind == .polygonal { PolygonalLassoToolIcon().frame(width: 18, height: 18) }
+                        else if tool == .text {
+                            Image(systemName: session.textToolOrientation == .vertical ? "textformat.size" : "character.textbox").font(.system(size: 16))
+                        }
+                        else if tool == .brush && session.brushMode == .erase {
+                            Image(systemName: "eraser").font(.system(size: 16))
+                        }
                         // The Marquee's icon follows its shape: a dashed circle in Ellipse mode.
                         else { Image(systemName: tool == .marquee && session.marqueeKind == .ellipse ? "circle.dashed" : session.symbol(for: tool)).font(.system(size: 17)) }
                     }
@@ -215,15 +239,23 @@ struct ContentView: View {
                             RoundedRectangle(cornerRadius: 7)
                                 .strokeBorder(session.tool == tool ? Color.white.opacity(0.14) : .clear)
                         }
+                        .overlay(alignment: .bottomTrailing) {
+                            if hasSubTools(tool) {
+                                ToolDisclosureTriangle().padding(3)
+                            }
+                        }
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain).help(tool.label).accessibilityLabel(tool.label)
+                .buttonStyle(.plain).help(toolHelpText(tool)).accessibilityLabel(tool.label)
                 .foregroundStyle(.primary)
                 .accessibilityAddTraits(session.tool == tool ? .isSelected : [])
+                .contextMenu {
+                    subToolContextMenu(for: tool)
+                }
             }
             VStack(spacing: 6) {
                 Button {
-                    session.showsCharacterPanel.toggle()
+                    session.togglePanel(.character)
                 } label: {
                     Image(systemName: "character")
                         .font(.system(size: 15))
@@ -238,7 +270,7 @@ struct ContentView: View {
                 .help("Character & Paragraph".localized)
 
                 Button {
-                    session.showsHistoryPanel.toggle()
+                    session.togglePanel(.history)
                 } label: {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.system(size: 15))
@@ -262,6 +294,148 @@ struct ContentView: View {
         // Only scrolls (and bounces) when the tools don't all fit.
         .scrollBounceBehavior(.basedOnSize, axes: .vertical)
         .frame(width: 56)
+    }
+
+    private func hasSubTools(_ tool: NavigationTool) -> Bool {
+        switch tool {
+        case .gradient, .marquee, .lasso, .brush, .text, .shape: return true
+        default: return false
+        }
+    }
+
+    private func toolHelpText(_ tool: NavigationTool) -> String {
+        if tool == .gradient {
+            return session.gradientSubTool == .paintBucket ? "Paint Bucket Tool (G)".localized : "Gradient Tool (G)".localized
+        }
+        if tool == .text {
+            return session.textToolOrientation == .vertical ? "Vertical Type Tool (T)".localized : "Horizontal Type Tool (T)".localized
+        }
+        if tool == .brush && session.brushMode == .erase {
+            return "Eraser Tool (E)".localized
+        }
+        return tool.label
+    }
+
+    @ViewBuilder
+    private func subToolContextMenu(for tool: NavigationTool) -> some View {
+        switch tool {
+        case .gradient:
+            Button {
+                session.selectTool(.gradient)
+                session.gradientSubTool = .gradient
+            } label: {
+                HStack {
+                    Text("Gradient Tool (G)".localized)
+                    if session.gradientSubTool == .gradient { Image(systemName: "checkmark") }
+                }
+            }
+            Button {
+                session.selectTool(.gradient)
+                session.gradientSubTool = .paintBucket
+            } label: {
+                HStack {
+                    Text("Paint Bucket Tool (G)".localized)
+                    if session.gradientSubTool == .paintBucket { Image(systemName: "checkmark") }
+                }
+            }
+        case .marquee:
+            Button {
+                session.selectTool(.marquee)
+                session.marqueeKind = .rectangle
+            } label: {
+                HStack {
+                    Text("Rectangular Marquee Tool (M)".localized)
+                    if session.marqueeKind == .rectangle { Image(systemName: "checkmark") }
+                }
+            }
+            Button {
+                session.selectTool(.marquee)
+                session.marqueeKind = .ellipse
+            } label: {
+                HStack {
+                    Text("Elliptical Marquee Tool (M)".localized)
+                    if session.marqueeKind == .ellipse { Image(systemName: "checkmark") }
+                }
+            }
+        case .lasso:
+            Button {
+                session.selectTool(.lasso)
+                session.lassoKind = .freehand
+            } label: {
+                HStack {
+                    Text("Lasso Tool (L)".localized)
+                    if session.lassoKind == .freehand { Image(systemName: "checkmark") }
+                }
+            }
+            Button {
+                session.selectTool(.lasso)
+                session.lassoKind = .polygonal
+            } label: {
+                HStack {
+                    Text("Polygonal Lasso Tool (L)".localized)
+                    if session.lassoKind == .polygonal { Image(systemName: "checkmark") }
+                }
+            }
+        case .brush:
+            Button {
+                session.selectTool(.brush)
+                session.brushMode = .paint
+            } label: {
+                HStack {
+                    Text("Brush Tool (B)".localized)
+                    if session.brushMode == .paint { Image(systemName: "checkmark") }
+                }
+            }
+            Button {
+                session.selectTool(.brush)
+                session.brushMode = .erase
+            } label: {
+                HStack {
+                    Text("Eraser Tool (E)".localized)
+                    if session.brushMode == .erase { Image(systemName: "checkmark") }
+                }
+            }
+        case .text:
+            Button {
+                session.selectTool(.text)
+                session.textToolOrientation = .horizontal
+            } label: {
+                HStack {
+                    Text("Horizontal Type Tool (T)".localized)
+                    if session.textToolOrientation == .horizontal { Image(systemName: "checkmark") }
+                }
+            }
+            Button {
+                session.selectTool(.text)
+                session.textToolOrientation = .vertical
+            } label: {
+                HStack {
+                    Text("Vertical Type Tool (T)".localized)
+                    if session.textToolOrientation == .vertical { Image(systemName: "checkmark") }
+                }
+            }
+        case .shape:
+            Button {
+                session.selectTool(.shape)
+                session.shapeKind = .rectangle
+            } label: {
+                HStack {
+                    Text("Rectangle Tool (U)".localized)
+                    if session.shapeKind == .rectangle { Image(systemName: "checkmark") }
+                }
+            }
+            Button {
+                session.selectTool(.shape)
+                session.shapeKind = .ellipse
+            } label: {
+                HStack {
+                    Text("Ellipse Tool (U)".localized)
+                    if session.shapeKind == .ellipse { Image(systemName: "checkmark") }
+                }
+            }
+        default:
+            EmptyView()
+        }
     }
     private var welcome: some View {
         NewCanvasSheet(session: session,
@@ -315,6 +489,8 @@ struct ContentView: View {
                 return "按住 Option 单击拾取源 · 拖动仿制 · [ ] 粗细 · Shift-[ ] 硬度 · 1–0 不透明度 · 空格键平移"
             case .spotHealing:
                 return "拖过污点以修复 · [ ] 粗细 · Shift-[ ] 硬度 · Escape 取消 · 空格键平移"
+            case .text:
+                return "单击画布新建文字图层 · 双击已有文字就地编辑 · ⇧T 切换横竖排 · 空格键平移"
             case .shape:
                 let kind = session.shapeKind == .rectangle ? "正方形" : "正圆"
                 let switchKind = session.shapeKind == .rectangle ? "椭圆" : "矩形"
@@ -335,15 +511,16 @@ struct ContentView: View {
                 return "单击放大 · Option 单击缩小 · 左右拖动平滑缩放 · 空格键平移"
             }
         } else {
-            return session.tool == .marquee ? (session.marqueeKind == .ellipse ? "Drag an ellipse · Shift add · Option subtract · Shift again mid-drag circle · Drag inside to move · Delete clears · ⌘D deselect" : "Drag a rectangle · Shift add · Option subtract · Shift again mid-drag square · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect") : session.tool == .wand ? "Click to select similar colors · Shift add · Option subtract · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect" : session.tool == .lasso ? (session.lassoKind == .freehand ? "Drag to select · Drag inside to move · Shift add · Option subtract · Delete clears · ⌥⌫/⌘⌫ fill · ⌘D deselect" : "Click corners · Click start, double-click or Enter to close · Delete removes corner · Escape cancel") : session.tool == .brush ? (session.brushMode == .erase ? "Drag to erase" : "Drag to paint") + " · [ ] size · Shift-[ ] hardness · 1–0 opacity · Escape cancel · Space to pan" : session.tool == .blur ? (session.blurMode == .blur ? "Drag to soften" : session.blurMode == .smudge ? "Drag to smudge" : "Drag to push pixels") + " · [ ] size · Shift-[ ] hardness · 1–0 strength · Space to pan" : session.tool == .cloneStamp ? "Option-click to set the source · Drag to clone · [ ] size · Shift-[ ] hardness · 1–0 opacity · Space to pan" : session.tool == .spotHealing ? "Drag over blemishes to heal · [ ] size · Shift-[ ] hardness · Escape cancel · Space to pan" : session.tool == .shape ? "Drag to draw a shape on a new layer · Shift \(session.shapeKind == .rectangle ? "square" : "circle") · Option from center · Shift-U \(session.shapeKind == .rectangle ? "ellipse" : "rectangle") · Escape cancel · Space to pan" : session.tool == .gradient ? "Drag to draw · Drag ends to adjust · Shift 45° · 1–0 opacity · Enter apply · Escape cancel" : session.tool == .crop ? "Drag to crop · Enter apply · Escape cancel · Space to pan" : session.tool == .move ? "Drag to move · Handles to resize · Circle to rotate · 1–0 layer opacity · Space to pan" : session.tool == .hand ? "Drag to pan · Pinch to zoom" : session.tool == .idle ? "No tool selected · Press a tool's key to pick one · Space to pan" : "Click to zoom in · Option-click to zoom out · Drag right or left to zoom smoothly · Space to pan"
+            return session.tool == .marquee ? (session.marqueeKind == .ellipse ? "Drag an ellipse · Shift add · Option subtract · Shift again mid-drag circle · Drag inside to move · Delete clears · ⌘D deselect" : "Drag a rectangle · Shift add · Option subtract · Shift again mid-drag square · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect") : session.tool == .wand ? "Click to select similar colors · Shift add · Option subtract · Drag inside to move · ⌘-drag moves pixels · Delete clears · ⌘D deselect" : session.tool == .lasso ? (session.lassoKind == .freehand ? "Drag to select · Drag inside to move · Shift add · Option subtract · Delete clears · ⌥⌫/⌘⌫ fill · ⌘D deselect" : "Click corners · Click start, double-click or Enter to close · Delete removes corner · Escape cancel") : session.tool == .brush ? (session.brushMode == .erase ? "Drag to erase" : "Drag to paint") + " · [ ] size · Shift-[ ] hardness · 1–0 opacity · Escape cancel · Space to pan" : session.tool == .blur ? (session.blurMode == .blur ? "Drag to soften" : session.blurMode == .smudge ? "Drag to smudge" : "Drag to push pixels") + " · [ ] size · Shift-[ ] hardness · 1–0 strength · Space to pan" : session.tool == .cloneStamp ? "Option-click to set the source · Drag to clone · [ ] size · Shift-[ ] hardness · 1–0 opacity · Space to pan" : session.tool == .spotHealing ? "Drag over blemishes to heal · [ ] size · Shift-[ ] hardness · Escape cancel · Space to pan" : session.tool == .text ? "Click canvas to add text · Double-click text to edit · Shift-T switches orientation · Space to pan" : session.tool == .shape ? "Drag to draw a shape on a new layer · Shift \(session.shapeKind == .rectangle ? "square" : "circle") · Option from center · Shift-U \(session.shapeKind == .rectangle ? "ellipse" : "rectangle") · Escape cancel · Space to pan" : session.tool == .gradient ? "Drag to draw · Drag ends to adjust · Shift 45° · 1–0 opacity · Enter apply · Escape cancel" : session.tool == .crop ? "Drag to crop · Enter apply · Escape cancel · Space to pan" : session.tool == .move ? "Drag to move · Handles to resize · Circle to rotate · 1–0 layer opacity · Space to pan" : session.tool == .hand ? "Drag to pan · Pinch to zoom" : session.tool == .idle ? "No tool selected · Press a tool's key to pick one · Space to pan" : "Click to zoom in · Option-click to zoom out · Drag right or left to zoom smoothly · Space to pan"
         }
     }
 }
 
-/// A panel's divider that resizes the panel to its right: drag left to widen, right to narrow, within `range`.
+/// A panel's divider that resizes the panel to its left or right: drag within `range`.
 private struct PanelResizeEdge: View {
     @Binding var width: Double
     let range: ClosedRange<Double>
+    var isLeading: Bool = true
     @State private var startWidth: Double?
 
     var body: some View {
@@ -354,7 +531,8 @@ private struct PanelResizeEdge: View {
                     .onChanged { value in
                         let start = startWidth ?? width
                         startWidth = start
-                        width = min(range.upperBound, max(range.lowerBound, (start - value.translation.width).rounded()))
+                        let delta = isLeading ? -value.translation.width : value.translation.width
+                        width = min(range.upperBound, max(range.lowerBound, (start + delta).rounded()))
                     }
                     .onEnded { _ in startWidth = nil })
                 .help("Drag to resize the panel".localized)
@@ -489,18 +667,32 @@ private struct FloatingPanelsModifier: ViewModifier {
                     filterPanel.show(title: session.filterEdit?.kind.rawValue.localized ?? "Filter".localized, content: FilterSheet(session: session))
                 }
             }
-            .onChange(of: session.showsCharacterPanel) { _, shows in
-                if !shows { characterPanel.close() }
+            .onChange(of: session.showsCharacterPanel && session.characterDockLocation == .floating) { _, isFloating in
+                if !isFloating { characterPanel.close() }
                 else {
                     characterPanel.onClose = { session.showsCharacterPanel = false }
-                    characterPanel.show(title: "Character & Paragraph".localized, content: CharacterParagraphPanel(session: session))
+                    characterPanel.show(title: "Character & Paragraph".localized, content: CharacterParagraphPanel(session: session, isFloating: true))
                 }
             }
-            .onChange(of: session.showsHistoryPanel) { _, shows in
-                if !shows { historyPanel.close() }
+            .onChange(of: session.characterDockLocation) { _, loc in
+                if loc != .floating { characterPanel.close() }
+                else if session.showsCharacterPanel {
+                    characterPanel.onClose = { session.showsCharacterPanel = false }
+                    characterPanel.show(title: "Character & Paragraph".localized, content: CharacterParagraphPanel(session: session, isFloating: true))
+                }
+            }
+            .onChange(of: session.showsHistoryPanel && session.historyDockLocation == .floating) { _, isFloating in
+                if !isFloating { historyPanel.close() }
                 else {
                     historyPanel.onClose = { session.showsHistoryPanel = false }
-                    historyPanel.show(title: "History".localized, content: HistoryPanel(session: session))
+                    historyPanel.show(title: "History".localized, content: HistoryPanel(session: session, isFloating: true))
+                }
+            }
+            .onChange(of: session.historyDockLocation) { _, loc in
+                if loc != .floating { historyPanel.close() }
+                else if session.showsHistoryPanel {
+                    historyPanel.onClose = { session.showsHistoryPanel = false }
+                    historyPanel.show(title: "History".localized, content: HistoryPanel(session: session, isFloating: true))
                 }
             }
     }
@@ -537,4 +729,19 @@ private struct ErrorAlertsModifier: ViewModifier {
             }
     }
 }
+
+struct ToolDisclosureTriangle: View {
+    var body: some View {
+        Canvas { context, size in
+            var path = Path()
+            path.move(to: CGPoint(x: size.width, y: 0))
+            path.addLine(to: CGPoint(x: size.width, y: size.height))
+            path.addLine(to: CGPoint(x: 0, y: size.height))
+            path.closeSubpath()
+            context.fill(path, with: .color(.white.opacity(0.55)))
+        }
+        .frame(width: 5, height: 5)
+    }
+}
+
 

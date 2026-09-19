@@ -1,5 +1,57 @@
 import SwiftUI
 
+enum PanelDockLocation: String, CaseIterable, Codable {
+    case rightSidebar = "Right Sidebar"
+    case leftSidebar = "Left Sidebar"
+    case floating = "Floating Window"
+}
+
+enum SidebarSection: String, CaseIterable, Codable {
+    case top = "Top"
+    case middle = "Middle"
+    case bottom = "Bottom"
+
+    var localizedTitle: String {
+        switch self {
+        case .top: return "Top Section".localized
+        case .middle: return "Middle Section".localized
+        case .bottom: return "Bottom Section".localized
+        }
+    }
+}
+
+enum DockablePanelKind: String, CaseIterable, Identifiable {
+    case layers = "Layers"
+    case character = "Character & Paragraph"
+    case history = "History"
+
+    var id: String { rawValue }
+
+    var localizedTitle: String {
+        switch self {
+        case .layers: return "Layers".localized
+        case .character: return "Character & Paragraph".localized
+        case .history: return "History".localized
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .layers: return "Layers".localized
+        case .character: return "Character".localized
+        case .history: return "History".localized
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .layers: return "square.3.layers.3d"
+        case .character: return "character"
+        case .history: return "clock.arrow.circlepath"
+        }
+    }
+}
+
 struct ImageLayer: Identifiable, Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id && lhs.name == rhs.name && lhs.isVisible == rhs.isVisible && lhs.transform == rhs.transform
@@ -81,16 +133,40 @@ struct CanvasDocument: Equatable {
     }
 }
 
+enum GradientSubTool: String, CaseIterable, Codable {
+    case gradient = "Gradient Tool"
+    case paintBucket = "Paint Bucket Tool"
+
+    var localizedTitle: String {
+        switch self {
+        case .gradient: return "Gradient Tool (G)".localized
+        case .paintBucket: return "Paint Bucket Tool (G)".localized
+        }
+    }
+}
+
+enum TextToolOrientation: String, CaseIterable, Codable {
+    case horizontal = "Horizontal Type Tool"
+    case vertical = "Vertical Type Tool"
+
+    var localizedTitle: String {
+        switch self {
+        case .horizontal: return "Horizontal Type Tool (T)".localized
+        case .vertical: return "Vertical Type Tool (T)".localized
+        }
+    }
+}
+
 enum NavigationTool: String, CaseIterable {
-    case move, marquee, lasso, wand, crop, brush, spotHealing, cloneStamp, blur, gradient, shape, eyedropper, hand, zoom
+    case move, marquee, lasso, wand, crop, brush, spotHealing, cloneStamp, blur, gradient, text, shape, eyedropper, hand, zoom
     /// No tool (A): nothing in the tool rail is selected and canvas clicks do nothing.
     case idle
     /// Tools that paint with the brush tip, sharing its size, hardness, opacity, and keys.
     var isBrushTool: Bool { self == .brush || self == .spotHealing || self == .cloneStamp || self == .blur }
     /// Tools that draw and edit selections, sharing modifiers, moving, and nudging.
     var isSelectionTool: Bool { self == .marquee || self == .lasso || self == .wand }
-    var symbol: String { self == .eyedropper ? "eyedropper" : self == .marquee ? "rectangle.dashed" : self == .lasso ? "lasso" : self == .wand ? "wand.and.stars" : self == .brush ? "paintbrush.pointed" : self == .spotHealing ? "bandage" : self == .cloneStamp ? "seal" : self == .blur ? "drop" : self == .gradient ? "square.bottomhalf.filled" : self == .shape ? "square.on.circle" : self == .crop ? "crop" : self == .move ? "arrow.up.left.and.arrow.down.right" : self == .hand ? "hand.draw" : "magnifyingglass" }
-    var labelEnglish: String { self == .eyedropper ? "Eyedropper (I)" : self == .marquee ? "Marquee (M)" : self == .lasso ? "Lasso (L)" : self == .wand ? "Magic Wand (W)" : self == .brush ? "Brush (B) · Eraser (E)" : self == .spotHealing ? "Spot Healing Brush (J)" : self == .cloneStamp ? "Clone Stamp (S) · Option-click sets the source" : self == .blur ? "Smear (R)" : self == .gradient ? "Gradient (G)" : self == .shape ? "Shape (U) · Shift-U switches Rectangle/Ellipse" : self == .crop ? "Crop (C)" : self == .move ? "Move / Transform (V)" : self == .hand ? "Hand (H)" : "Zoom (Z)" }
+    var symbol: String { self == .eyedropper ? "eyedropper" : self == .marquee ? "rectangle.dashed" : self == .lasso ? "lasso" : self == .wand ? "wand.and.stars" : self == .brush ? "paintbrush.pointed" : self == .spotHealing ? "bandage" : self == .cloneStamp ? "seal" : self == .blur ? "drop" : self == .gradient ? "square.bottomhalf.filled" : self == .text ? "character.textbox" : self == .shape ? "square.on.circle" : self == .crop ? "crop" : self == .move ? "arrow.up.left.and.arrow.down.right" : self == .hand ? "hand.draw" : "magnifyingglass" }
+    var labelEnglish: String { self == .eyedropper ? "Eyedropper (I)" : self == .marquee ? "Marquee (M)" : self == .lasso ? "Lasso (L)" : self == .wand ? "Magic Wand (W)" : self == .brush ? "Brush (B) · Eraser (E)" : self == .spotHealing ? "Spot Healing Brush (J)" : self == .cloneStamp ? "Clone Stamp (S) · Option-click sets the source" : self == .blur ? "Smear (R)" : self == .gradient ? "Gradient (G)" : self == .text ? "Type Tool (T)" : self == .shape ? "Shape (U) · Shift-U switches Rectangle/Ellipse" : self == .crop ? "Crop (C)" : self == .move ? "Move / Transform (V)" : self == .hand ? "Hand (H)" : "Zoom (Z)" }
     var label: String { labelEnglish.localized }
 }
 
@@ -436,9 +512,192 @@ final class EditorSession {
     @ObservationIgnored var refreshCanvasPreview: (() -> Void)?
     var isMaskSelected = false
     var selectedLayerIDs: Set<UUID> = []
-    var showsCharacterPanel: Bool = false
-    var showsHistoryPanel: Bool = false
-    var showsLayersPanel: Bool = true
+    var gradientSubTool: GradientSubTool = .gradient
+    var textToolOrientation: TextToolOrientation = .horizontal
+
+    var showsCharacterPanel: Bool = AppPreferencesStorage.loadLayout().showsCharacterPanel
+    var showsHistoryPanel: Bool = AppPreferencesStorage.loadLayout().showsHistoryPanel
+    var showsLayersPanel: Bool = AppPreferencesStorage.loadLayout().showsLayersPanel
+
+    var layersDockLocation: PanelDockLocation = AppPreferencesStorage.loadLayout().layersLocation
+    var characterDockLocation: PanelDockLocation = AppPreferencesStorage.loadLayout().characterLocation
+    var historyDockLocation: PanelDockLocation = AppPreferencesStorage.loadLayout().historyLocation
+
+    var layersSection: SidebarSection = AppPreferencesStorage.loadLayout().layersSection
+    var characterSection: SidebarSection = AppPreferencesStorage.loadLayout().characterSection
+    var historySection: SidebarSection = AppPreferencesStorage.loadLayout().historySection
+
+    var isEditingTextOnCanvas: Bool = false
+
+    var activeRightSidebarTab: DockablePanelKind = .layers
+    var activeLeftSidebarTab: DockablePanelKind = .history
+    var activeTabs: [String: DockablePanelKind] = [:]
+
+    func syncLayoutToPreferences() {
+        AppPreferencesStorage.saveLayout(SidebarLayoutState(
+            layersLocation: layersDockLocation,
+            characterLocation: characterDockLocation,
+            historyLocation: historyDockLocation,
+            layersSection: layersSection,
+            characterSection: characterSection,
+            historySection: historySection,
+            showsLayersPanel: showsLayersPanel,
+            showsCharacterPanel: showsCharacterPanel,
+            showsHistoryPanel: showsHistoryPanel
+        ))
+    }
+
+    func activeTab(for location: PanelDockLocation, section: SidebarSection) -> DockablePanelKind {
+        let key = "\(location.rawValue)_\(section.rawValue)"
+        let available = panels(in: location, section: section)
+        if let stored = activeTabs[key], available.contains(stored) {
+            return stored
+        }
+        return available.first ?? .layers
+    }
+
+    func setActiveTab(_ tab: DockablePanelKind, for location: PanelDockLocation, section: SidebarSection) {
+        let key = "\(location.rawValue)_\(section.rawValue)"
+        activeTabs[key] = tab
+        if location == .rightSidebar { activeRightSidebarTab = tab }
+        else if location == .leftSidebar { activeLeftSidebarTab = tab }
+    }
+
+    func section(for kind: DockablePanelKind) -> SidebarSection {
+        switch kind {
+        case .layers: return layersSection
+        case .character: return characterSection
+        case .history: return historySection
+        }
+    }
+
+    func setSection(_ section: SidebarSection, for kind: DockablePanelKind) {
+        switch kind {
+        case .layers: layersSection = section
+        case .character: characterSection = section
+        case .history: historySection = section
+        }
+        syncLayoutToPreferences()
+    }
+
+    func panels(in location: PanelDockLocation, section: SidebarSection) -> [DockablePanelKind] {
+        var list: [DockablePanelKind] = []
+        if showsLayersPanel && layersDockLocation == location && layersSection == section { list.append(.layers) }
+        if showsCharacterPanel && characterDockLocation == location && characterSection == section { list.append(.character) }
+        if showsHistoryPanel && historyDockLocation == location && historySection == section { list.append(.history) }
+        return list
+    }
+
+    func activeSections(in location: PanelDockLocation) -> [SidebarSection] {
+        SidebarSection.allCases.filter { !panels(in: location, section: $0).isEmpty }
+    }
+
+    var panelsInRightSidebar: [DockablePanelKind] {
+        SidebarSection.allCases.flatMap { panels(in: .rightSidebar, section: $0) }
+    }
+
+    var panelsInLeftSidebar: [DockablePanelKind] {
+        SidebarSection.allCases.flatMap { panels(in: .leftSidebar, section: $0) }
+    }
+
+    var showsRightSidebar: Bool { !panelsInRightSidebar.isEmpty }
+    var showsLeftSidebar: Bool { !panelsInLeftSidebar.isEmpty }
+
+    func togglePanel(_ kind: DockablePanelKind) {
+        switch kind {
+        case .layers:
+            showsLayersPanel.toggle()
+            if showsLayersPanel {
+                setActiveTab(.layers, for: layersDockLocation, section: layersSection)
+            }
+        case .character:
+            if !showsCharacterPanel {
+                showsCharacterPanel = true
+                setActiveTab(.character, for: characterDockLocation, section: characterSection)
+            } else {
+                if characterDockLocation == .floating {
+                    showsCharacterPanel = false
+                } else {
+                    let current = activeTab(for: characterDockLocation, section: characterSection)
+                    if current == .character {
+                        showsCharacterPanel = false
+                    } else {
+                        setActiveTab(.character, for: characterDockLocation, section: characterSection)
+                    }
+                }
+            }
+        case .history:
+            if !showsHistoryPanel {
+                showsHistoryPanel = true
+                setActiveTab(.history, for: historyDockLocation, section: historySection)
+            } else {
+                if historyDockLocation == .floating {
+                    showsHistoryPanel = false
+                } else {
+                    let current = activeTab(for: historyDockLocation, section: historySection)
+                    if current == .history {
+                        showsHistoryPanel = false
+                    } else {
+                        setActiveTab(.history, for: historyDockLocation, section: historySection)
+                    }
+                }
+            }
+        }
+        syncLayoutToPreferences()
+    }
+
+    func setDockLocation(_ location: PanelDockLocation, section: SidebarSection? = nil, for kind: DockablePanelKind) {
+        if let section { setSection(section, for: kind) }
+        let targetSection = section ?? self.section(for: kind)
+        switch kind {
+        case .layers:
+            layersDockLocation = location
+            showsLayersPanel = true
+            setActiveTab(.layers, for: location, section: targetSection)
+        case .character:
+            characterDockLocation = location
+            showsCharacterPanel = true
+            setActiveTab(.character, for: location, section: targetSection)
+        case .history:
+            historyDockLocation = location
+            showsHistoryPanel = true
+            setActiveTab(.history, for: location, section: targetSection)
+        }
+        syncLayoutToPreferences()
+    }
+
+    var textEditingInitialText: String? = nil
+
+    func beginCanvasTextEditing(layerID: UUID? = nil) {
+        if let layerID { selectLayer(layerID) }
+        guard activeLayer?.liveText != nil else { return }
+        textEditingInitialText = activeTextStyle.text
+        isEditingTextOnCanvas = true
+    }
+
+    func finishCanvasTextEditing() {
+        isEditingTextOnCanvas = false
+        textEditingInitialText = nil
+    }
+
+    func cancelCanvasTextEditing() {
+        if let initial = textEditingInitialText {
+            activeTextStyle.text = initial
+            updateActiveLayerText(style: activeTextStyle)
+        }
+        isEditingTextOnCanvas = false
+        textEditingInitialText = nil
+    }
+
+    func closePanel(_ kind: DockablePanelKind) {
+        switch kind {
+        case .layers: showsLayersPanel = false
+        case .character: showsCharacterPanel = false
+        case .history: showsHistoryPanel = false
+        }
+        syncLayoutToPreferences()
+    }
+
     var activeTextStyle: LayerTextStyle = LayerTextStyle()
 
     var activeLayerID: UUID? {
@@ -717,8 +976,8 @@ final class EditorSession {
         return "\(prefix) \(number)"
     }
 
-    /// 在画布中心添加一个新的文字图层
-    func addTextLayer(initialText: String? = nil, isVertical: Bool? = nil) {
+    /// 在画布指定位置（或中心）添加一个新的文字图层，并可选择是否立即进入编辑
+    func addTextLayer(at originPoint: CGPoint? = nil, initialText: String? = nil, isVertical: Bool? = nil, startEditing: Bool = false) {
         guard canEditLayers, let document else { return }
         var style = activeTextStyle
         if let initialText { style.text = initialText }
@@ -727,11 +986,19 @@ final class EditorSession {
 
         do {
             let image = try LayerText.renderImage(style: style)
-            let canvasCenter = CGPoint(x: document.width / 2, y: document.height / 2)
-            let origin = CGPoint(
-                x: max(0, canvasCenter.x - CGFloat(image.width) / 2).rounded(),
-                y: max(0, canvasCenter.y - CGFloat(image.height) / 2).rounded()
-            )
+            let origin: CGPoint
+            if let originPoint {
+                origin = CGPoint(
+                    x: max(0, min(CGFloat(document.width) - 10, originPoint.x)).rounded(),
+                    y: max(0, min(CGFloat(document.height) - 10, originPoint.y)).rounded()
+                )
+            } else {
+                let canvasCenter = CGPoint(x: document.width / 2, y: document.height / 2)
+                origin = CGPoint(
+                    x: max(0, canvasCenter.x - CGFloat(image.width) / 2).rounded(),
+                    y: max(0, canvasCenter.y - CGFloat(image.height) / 2).rounded()
+                )
+            }
             let layerName = nextTextLayerName()
             addPixelLayer(
                 image,
@@ -741,7 +1008,9 @@ final class EditorSession {
                 dropsSelection: false,
                 text: LayerText(style: style, image: image)
             )
-            showsCharacterPanel = true
+            if startEditing, let activeID = activeLayerID {
+                beginCanvasTextEditing(layerID: activeID)
+            }
         } catch {
             brushError = error.localizedDescription
         }

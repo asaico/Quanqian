@@ -10,6 +10,7 @@ struct ProjectWindowBridge: NSViewRepresentable {
         view.window?.representedURL = controller.session.projectURL
         view.window?.isDocumentEdited = controller.session.isModified
         view.window?.titleVisibility = .hidden
+        view.window?.isMovableByWindowBackground = false
     }
 }
 
@@ -27,11 +28,13 @@ final class ProjectWindowView: NSView {
         proxy.controller = controller
         controller.window = window
         controller.workspace?.window = window
+        window?.isMovableByWindowBackground = false
     }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         DispatchQueue.main.async { [weak self] in
             guard let self, let window = self.window else { return }
+            window.isMovableByWindowBackground = false
             self.controller.window = window
             self.controller.workspace?.window = window
             if window.delegate !== self.proxy {

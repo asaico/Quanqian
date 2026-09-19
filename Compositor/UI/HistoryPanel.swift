@@ -2,38 +2,46 @@ import SwiftUI
 
 struct HistoryPanel: View {
     @Bindable var session: EditorSession
+    var isFloating: Bool = false
+    var showHeader: Bool = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // 顶栏：标题与操作
-            HStack {
-                Text("History".localized)
-                    .font(.system(size: 13, weight: .semibold))
-                Spacer()
-                Button {
-                    session.undo()
-                } label: {
-                    Image(systemName: "arrow.uturn.backward")
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-                .disabled(!session.canUndo)
-                .help("Undo (⌘Z)".localized)
+            if showHeader {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("History".localized)
+                        .font(.system(size: 11, weight: .semibold))
+                    Spacer()
+                    Button {
+                        session.undo()
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!session.canUndo)
+                    .help("Undo (⌘Z)".localized)
 
-                Button {
-                    session.redo()
-                } label: {
-                    Image(systemName: "arrow.uturn.forward")
-                        .font(.system(size: 12))
+                    Button {
+                        session.redo()
+                    } label: {
+                        Image(systemName: "arrow.uturn.forward")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!session.canRedo)
+                    .help("Redo (⇧⌘Z)".localized)
+
+                    PanelHeaderOptionsMenu(session: session, panel: .history)
                 }
-                .buttonStyle(.plain)
-                .disabled(!session.canRedo)
-                .help("Redo (⇧⌘Z)".localized)
+                .padding(.horizontal, 12)
+                .frame(height: 32)
+                .background(Color(white: 0.12))
+
+                Divider()
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-
-            Divider()
 
             // 步骤列表
             let steps = session.history.allSteps
@@ -74,7 +82,9 @@ struct HistoryPanel: View {
                 }
             }
         }
-        .frame(width: 250, height: 340)
+        .frame(width: isFloating ? 260 : nil, height: isFloating ? 360 : nil)
+        .frame(maxWidth: isFloating ? nil : .infinity, maxHeight: isFloating ? nil : .infinity)
+        .background(Color(white: 0.14))
     }
 }
 
